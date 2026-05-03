@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import hashlib
 import os
 import secrets
 import sqlite3
@@ -30,6 +29,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from pwdlib import PasswordHash
 
 import settings as settings_module
 from discogs_helper import add_release_to_collection, get_username, manual_search, search_release
@@ -61,23 +61,7 @@ JWT_ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 SCAN_LIMITS = {'free': 5, 'basic': 50, 'pro': -1}
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login')
-
-_HASH_ITER = 260_000  # PBKDF2-SHA256 iterations (OWASP 2023 recommendation)
-
-
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), _HASH_ITER)
-    return f"pbkdf2:{salt}:{dk.hex()}"
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        _, salt, dk_hex = hashed.split(':')
-        dk = hashlib.pbkdf2_hmac('sha256', plain.encode(), salt.encode(), _HASH_ITER)
-        return secrets.compare_digest(dk.hex(), dk_hex)
-    except Exception:
-        return False
+_ph = PasswordHash.recommended()
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +93,21 @@ class UserMe(BaseModel):
     tier: str
     scans_used: int
     scans_limit: int
+    is_admin: bool
+
+
+class AdminUserItem(BaseModel):
+    id: int
+    email: str
+    tier: str
+    is_admin: bool
+    scans_used: int
+    created_at: str
+
+
+class AdminUserUpdate(BaseModel):
+    tier: Optional[Literal['free', 'basic', 'pro']] = None
+    is_admin: Optional[bool] = None
 
 
 class DiscogsSearchRequest(BaseModel):
@@ -147,10 +146,14 @@ def init_users_db() -> None:
                 tier TEXT NOT NULL DEFAULT 'free',
                 scans_used INTEGER NOT NULL DEFAULT 0,
                 scans_month TEXT NOT NULL,
+                is_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             '''
         )
+        cols = [row[1] for row in conn.execute('PRAGMA table_info(users)').fetchall()]
+        if 'is_admin' not in cols:
+            conn.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0')
         conn.commit()
 
 
@@ -207,6 +210,7 @@ def user_to_me(user: sqlite3.Row) -> UserMe:
         tier=user['tier'],
         scans_used=user['scans_used'],
         scans_limit=get_scans_limit(user['tier']),
+        is_admin=bool(user['is_admin']),
     )
 
 
@@ -241,6 +245,12 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         return dict(synced)
 
 
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if not current_user.get('is_admin'):
+        raise HTTPException(status_code=403, detail='Zugriff verweigert.')
+    return current_user
+
+
 def increment_scan_usage(email: str) -> None:
     with get_db_connection() as conn:
         user = get_user_by_email(conn, email)
@@ -272,12 +282,11 @@ def register(body: UserRegister):
         if get_user_by_email(conn, email) is not None:
             raise HTTPException(status_code=409, detail='E-Mail ist bereits registriert.')
 
+        count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        is_admin = 1 if count == 0 else 0
         conn.execute(
-            '''
-            INSERT INTO users (email, password_hash, tier, scans_used, scans_month)
-            VALUES (?, ?, 'free', 0, ?)
-            ''',
-            (email, hash_password(body.password), current_scan_month()),
+            'INSERT INTO users (email, password_hash, tier, scans_used, scans_month, is_admin) VALUES (?, ?, ?, 0, ?, ?)',
+            (email, _ph.hash(body.password), 'free', current_scan_month(), is_admin),
         )
         conn.commit()
 
@@ -290,7 +299,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
     with get_db_connection() as conn:
         user = get_user_by_email(conn, email)
-        if user is None or not verify_password(form_data.password, user['password_hash']):
+        if user is None or not _ph.verify(form_data.password, user['password_hash']):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail='Ungültige E-Mail oder Passwort.',
@@ -308,6 +317,63 @@ def auth_me(current_user: dict = Depends(get_current_user)):
         if user is None:
             raise HTTPException(status_code=404, detail='Benutzer nicht gefunden.')
         return user_to_me(sync_user_scan_cycle(conn, user))
+
+
+@app.get('/admin/users', response_model=list[AdminUserItem])
+def admin_list_users(admin: dict = Depends(require_admin)):
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            'SELECT id, email, tier, is_admin, scans_used, created_at FROM users ORDER BY created_at ASC'
+        ).fetchall()
+        return [
+            AdminUserItem(
+                id=row['id'],
+                email=row['email'],
+                tier=row['tier'],
+                is_admin=bool(row['is_admin']),
+                scans_used=row['scans_used'],
+                created_at=row['created_at'],
+            )
+            for row in rows
+        ]
+
+
+@app.put('/admin/users/{user_id}', response_model=AdminUserItem)
+def admin_update_user(user_id: int, body: AdminUserUpdate, admin: dict = Depends(require_admin)):
+    with get_db_connection() as conn:
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        if user is None:
+            raise HTTPException(status_code=404, detail='Benutzer nicht gefunden.')
+        updates = {}
+        if body.tier is not None:
+            updates['tier'] = body.tier
+        if body.is_admin is not None:
+            updates['is_admin'] = 1 if body.is_admin else 0
+        if updates:
+            set_clause = ', '.join(f'{key} = ?' for key in updates)
+            conn.execute(f'UPDATE users SET {set_clause} WHERE id = ?', (*updates.values(), user_id))
+            conn.commit()
+        row = conn.execute(
+            'SELECT id, email, tier, is_admin, scans_used, created_at FROM users WHERE id = ?',
+            (user_id,),
+        ).fetchone()
+        return AdminUserItem(
+            id=row['id'],
+            email=row['email'],
+            tier=row['tier'],
+            is_admin=bool(row['is_admin']),
+            scans_used=row['scans_used'],
+            created_at=row['created_at'],
+        )
+
+
+@app.delete('/admin/users/{user_id}', status_code=204)
+def admin_delete_user(user_id: int, admin: dict = Depends(require_admin)):
+    if user_id == admin['id']:
+        raise HTTPException(status_code=400, detail='Du kannst dich nicht selbst löschen.')
+    with get_db_connection() as conn:
+        conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
