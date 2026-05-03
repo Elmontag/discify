@@ -3,7 +3,7 @@ app.py – Discify: CD Collection Manager
 
 Streamlit web application that:
 1. Accepts a photo of a CD shelf or stack.
-2. Uses OpenAI GPT-4o Vision to identify all visible albums.
+2. Uses a vision AI (Anthropic Claude or Ollama) to identify all visible albums.
 3. Looks each album up on Discogs.
 4. Presents an editable review table.
 5. Batch-adds confirmed albums to the user's Discogs collection.
@@ -25,7 +25,7 @@ from discogs_helper import (
     manual_search,
     search_release,
 )
-from vision import identify_cds_from_image
+from vision import identify_cds_from_image, ANTHROPIC_MODELS, OLLAMA_MODELS
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -90,7 +90,7 @@ div.stButton > button[kind="primary"]:hover { background-color: #c1121f; }
 # ---------------------------------------------------------------------------
 
 _DEFAULTS: dict = {
-    "albums_identified": [],   # [{artist, album}, …]  from GPT-4o
+    "albums_identified": [],   # [{artist, album}, …]  from vision AI
     "search_results": [],      # enriched dicts with Discogs data
     "discogs_username": None,  # fetched once after token entry
     "results_ready": False,
@@ -107,30 +107,68 @@ for key, value in _DEFAULTS.items():
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.image(
-        "https://upload.wikimedia.org/wikipedia/commons/4/45/A_small_cup_of_coffee.JPG",
-        use_container_width=True,
-        caption=None,
-    ) if False else None  # placeholder logo removed for clean look
-
     st.markdown("## ⚙️ Einstellungen")
     st.markdown("---")
 
-    openai_key = st.text_input(
-        "🔑 OpenAI API Key",
-        value=os.getenv("OPENAI_API_KEY", ""),
-        type="password",
-        help="Erhältlich unter platform.openai.com/api-keys",
+    # ---- Vision backend ------------------------------------------------
+    st.markdown("### 🤖 Vision-Backend")
+    vision_backend = st.radio(
+        "Backend auswählen",
+        options=["anthropic", "ollama"],
+        format_func=lambda x: "☁️ Anthropic Claude" if x == "anthropic" else "🏠 Ollama (lokal)",
+        horizontal=True,
+        label_visibility="collapsed",
     )
+
+    if vision_backend == "anthropic":
+        anthropic_key = st.text_input(
+            "🔑 Anthropic API Key",
+            value=os.getenv("ANTHROPIC_API_KEY", ""),
+            type="password",
+            help="Erhältlich unter console.anthropic.com/account/keys",
+        )
+        if anthropic_key:
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+
+        vision_model = st.selectbox(
+            "Modell",
+            options=ANTHROPIC_MODELS,
+            index=0,
+            help="claude-opus-4-5 hat die beste Bildqualität; haiku ist am schnellsten.",
+        )
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+    else:  # ollama
+        ollama_url = st.text_input(
+            "🌐 Ollama URL",
+            value=os.getenv("OLLAMA_URL", "http://localhost:11434"),
+            help="Standard: http://localhost:11434 – starte Ollama mit `ollama serve`",
+        )
+        vision_model = st.selectbox(
+            "Modell",
+            options=OLLAMA_MODELS,
+            index=0,
+            help="Das Modell muss vision-fähig sein und lokal installiert sein (`ollama pull llava`).",
+        )
+        # Custom model override
+        custom_model = st.text_input(
+            "Oder eigenes Modell eingeben",
+            value="",
+            placeholder="z.B. llava:34b",
+        )
+        if custom_model.strip():
+            vision_model = custom_model.strip()
+
+    st.markdown("---")
+
+    # ---- Discogs token -------------------------------------------------
+    st.markdown("### 🎵 Discogs")
     discogs_token = st.text_input(
-        "🎵 Discogs Token",
+        "Personal Access Token",
         value=os.getenv("DISCOGS_TOKEN", ""),
         type="password",
         help="Einstellungen › Entwickler › Personal Access Token",
     )
-
-    if openai_key:
-        os.environ["OPENAI_API_KEY"] = openai_key
     if discogs_token:
         os.environ["DISCOGS_TOKEN"] = discogs_token
 
@@ -149,7 +187,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(
         "[Discogs Token erstellen →](https://www.discogs.com/settings/developers)\n\n"
-        "[OpenAI API Key →](https://platform.openai.com/api-keys)"
+        "[Anthropic API Key →](https://console.anthropic.com/account/keys)\n\n"
+        "[Ollama installieren →](https://ollama.com/download)"
     )
 
 # ---------------------------------------------------------------------------
@@ -194,8 +233,8 @@ if uploaded_file:
 
     # Validate keys before allowing analysis
     missing = []
-    if not os.getenv("OPENAI_API_KEY"):
-        missing.append("OpenAI API Key")
+    if vision_backend == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
+        missing.append("Anthropic API Key")
     if not os.getenv("DISCOGS_TOKEN"):
         missing.append("Discogs Token")
 
@@ -208,9 +247,18 @@ if uploaded_file:
             # ---- Phase 1: Vision AI ----------------------------------------
             image_bytes = uploaded_file.getvalue()
 
-            with st.spinner("🤔 Analysiere Bild mit KI … (dies kann einige Sekunden dauern)"):
+            backend_label = (
+                f"Anthropic {vision_model}" if vision_backend == "anthropic"
+                else f"Ollama {vision_model}"
+            )
+            with st.spinner(f"🤔 Analysiere Bild mit {backend_label} … (dies kann einige Sekunden dauern)"):
                 try:
-                    identified = identify_cds_from_image(image_bytes)
+                    identified = identify_cds_from_image(
+                        image_bytes,
+                        backend=vision_backend,
+                        model=vision_model,
+                        ollama_url=ollama_url,
+                    )
                     st.session_state.albums_identified = identified
                 except (ValueError, RuntimeError) as exc:
                     st.error(f"❌ Fehler bei der Bildanalyse: {exc}")
