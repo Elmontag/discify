@@ -1,0 +1,13 @@
+services:
+  discify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discify
+    ports:
+      - "8000:8000"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    restart: unless-stopped

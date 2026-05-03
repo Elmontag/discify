@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.venv
+venv
+env
+ENV
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.streamlit
+dist
+build
