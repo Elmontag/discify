@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Disc, Library } from 'lucide-react-native';
 import { getAlbums, initDb } from '../services/db';
 import type { Album } from '../types';
 import type { RootStackParamList } from '../navigation';
@@ -70,9 +71,19 @@ export default function CollectionScreen() {
             alignItems: 'center',
           }}
         >
-          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#f5f7ff' }}>
-            💿 Sammlung
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Library size={20} color="#f5f7ff" />
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: 'bold',
+                color: '#f5f7ff',
+                marginLeft: 8,
+              }}
+            >
+              Sammlung
+            </Text>
+          </View>
           <Text style={{ color: '#9eaccf', fontSize: 13 }}>{albums.length} Alben</Text>
         </View>
         <TextInput
@@ -104,7 +115,7 @@ export default function CollectionScreen() {
         }
         ListEmptyComponent={
           <View style={{ alignItems: 'center', paddingTop: 80 }}>
-            <Text style={{ fontSize: 48 }}>📀</Text>
+            <Disc size={48} color="#9eaccf" />
             <Text
               style={{
                 color: '#f5f7ff',
@@ -149,7 +160,7 @@ export default function CollectionScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: 40 }}>💿</Text>
+                <Disc size={40} color="#9eaccf" />
               </View>
             )}
             <View style={{ padding: 10 }}>

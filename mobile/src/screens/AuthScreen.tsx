@@ -8,7 +8,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  View,
 } from 'react-native';
+import { Disc } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
@@ -45,16 +47,19 @@ export default function AuthScreen() {
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
       >
-        <Text
-          style={{
-            fontSize: 32,
-            fontWeight: 'bold',
-            color: '#f5f7ff',
-            marginBottom: 8,
-          }}
-        >
-          💿 Discify
-        </Text>
+        <View style={{ marginBottom: 8, alignItems: 'flex-start' }}>
+          <Disc size={40} color="#7c5cff" />
+          <Text
+            style={{
+              fontSize: 32,
+              fontWeight: 'bold',
+              color: '#f5f7ff',
+              marginTop: 12,
+            }}
+          >
+            Discify
+          </Text>
+        </View>
         <Text style={{ color: '#9eaccf', marginBottom: 40 }}>
           {mode === 'login' ? 'Willkommen zurück' : 'Neues Konto erstellen'}
         </Text>

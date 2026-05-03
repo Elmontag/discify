@@ -12,6 +12,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useNavigation } from '@react-navigation/native';
+import { Camera as CameraIcon } from 'lucide-react-native';
 import { api } from '../services/api';
 import { albumExists, insertAlbum } from '../services/db';
 import type { DiscogsRelease, ScanResult } from '../types';
@@ -238,7 +239,7 @@ export default function ScanScreen() {
                 {step === 'scanning' ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ fontSize: 28 }}>📷</Text>
+                  <CameraIcon size={28} color="#f5f7ff" />
                 )}
               </TouchableOpacity>
               <View style={{ width: 44 }} />

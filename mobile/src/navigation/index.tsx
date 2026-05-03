@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text } from 'react-native';
+import { Library, Settings as SettingsIcon } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import CollectionScreen from '../screens/CollectionScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -23,16 +23,19 @@ export type TabParamList = {
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = { Collection: '💿', Settings: '⚙️' };
-  return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{icons[name] ?? '●'}</Text>;
-}
-
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} />,
+        tabBarIcon: ({ color, size }) => {
+          if (route.name === 'Collection') {
+            return <Library size={size} color={color} />;
+          }
+          if (route.name === 'Settings') {
+            return <SettingsIcon size={size} color={color} />;
+          }
+          return null;
+        },
         tabBarStyle: { backgroundColor: '#07111f', borderTopColor: '#1a2a3f' },
         tabBarActiveTintColor: '#7c5cff',
         tabBarInactiveTintColor: '#9eaccf',
