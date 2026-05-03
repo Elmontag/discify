@@ -11,6 +11,23 @@ export interface Settings {
   discogs_token_set?: boolean
 }
 
+export interface UserMe {
+  email: string
+  tier: string
+  scans_used: number
+  scans_limit: number
+  is_admin: boolean
+}
+
+export interface AdminUser {
+  id: number
+  email: string
+  tier: string
+  is_admin: boolean
+  scans_used: number
+  created_at: string
+}
+
 export interface HealthStatus {
   discogs_connected: boolean
   discogs_username: string | null

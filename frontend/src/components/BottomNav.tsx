@@ -1,5 +1,6 @@
-import { Disc3, Settings, type LucideIcon } from 'lucide-react'
+import { Disc3, Settings, Users, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 interface NavItem {
   to: string
@@ -7,12 +8,17 @@ interface NavItem {
   Icon: LucideIcon
 }
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   { to: '/', label: 'Sammlung', Icon: Disc3 },
   { to: '/settings', label: 'Einstellungen', Icon: Settings },
 ]
 
 export default function BottomNav() {
+  const { user } = useAuth()
+  const navItems = user?.is_admin
+    ? [...baseNavItems, { to: '/admin', label: 'Admin', Icon: Users }]
+    : baseNavItems
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#07111f]/95 backdrop-blur-lg safe-area-inset-bottom">
       <div className="flex">

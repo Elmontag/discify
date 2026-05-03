@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
+import { Disc, RefreshCw, Search } from 'lucide-react'
 import AlbumCard from '../components/AlbumCard'
 import { api } from '../api/client'
 import type { Release } from '../api/types'
@@ -83,7 +83,7 @@ export default function CollectionPage() {
 
         {!loading && !error && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 text-5xl">💿</div>
+            <Disc size={56} className="mb-4 text-[#9eaccf]" />
             <h2 className="mb-2 text-lg font-bold text-[#f5f7ff]">
               {query ? 'Keine Treffer' : 'Sammlung ist leer'}
             </h2>
