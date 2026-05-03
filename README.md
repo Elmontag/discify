@@ -1,111 +1,111 @@
 # 💿 Discify
 
-**Discify** is a Streamlit web app that digitises your CD collection in seconds.
-Upload a photo of your CD shelf or stack, let an AI model identify every album, and
-add them all to your Discogs collection with one click.
+**Discify** digitises your CD collection in seconds.
+Photograph your CD shelf, let AI identify every album, review the results, and sync them directly to Discogs — optimised for smartphone and tablet.
+
+---
+
+## Architecture
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Vite · React · TypeScript · TailwindCSS |
+| Backend | Python · FastAPI · Uvicorn |
+| Vision AI | Anthropic Claude · Ollama (local) |
+| Collection | Discogs REST API |
+
+```
+discify/
+├── backend/          ← FastAPI + vision logic
+│   ├── main.py       ← REST API (runs on :8000)
+│   ├── vision.py     ← Claude / Ollama image analysis
+│   ├── discogs_helper.py
+│   ├── settings.py   ← Persistent settings (settings.json)
+│   └── requirements.txt
+└── frontend/         ← Vite/React app
+    └── src/
+        ├── pages/    ← CollectionPage, ScanSheet, SettingsPage
+        └── components/
+```
 
 ---
 
 ## Features
 
-- **AI Vision Engine** – Supports **Anthropic Claude** (cloud) and **Ollama** (local/self-hosted).
-  The model analyses a photo of CD spines and extracts artist/album names, even from narrow spine labels.
-- **Discogs Search** – Each identified album is matched against the Discogs database,
-  returning the best release with cover art and year.
-- **Review Interface** – An editable table lets you correct misidentified albums, remove
-  entries, or trigger a manual search for anything that wasn't found automatically.
-- **One-Click Add** – Batch-add all selected albums to your Discogs collection.
-- **Rate-Limit Aware** – Requests to the Discogs API are spaced at ≥ 1 second apart to
-  stay within the 60 req/min limit.
+- **Mobile-first UI** – Responsive grid, bottom navigation, floating action button
+- **Camera Capture** – On smartphones/tablets the + button opens the device camera directly
+- **AI Vision** – Anthropic Claude (cloud) or Ollama (self-hosted) identifies CDs from photos
+- **Discogs Integration** – Auto-matches releases, shows cover art, checks your existing collection
+- **Review & Edit** – Edit recognised artist/album names, run manual searches per item
+- **Batch Add** – One tap to add all new releases to your Discogs collection
+- **In-App Settings** – API keys configured in the Settings page, stored locally in `settings.json`
 
 ---
 
-## Setup
+## Local Development
 
-### 1. Clone & install dependencies
+### Prerequisites
+- Python 3.11+
+- Node.js 20+
+
+### Backend
 
 ```bash
-git clone https://github.com/Elmontag/discify.git
-cd discify
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+cd backend
 pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### 2. Configure API keys
+API docs: http://localhost:8000/docs
+
+### Frontend
 
 ```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
+
+The Vite dev server proxies `/api` → `http://localhost:8000`.
+
+### First-time setup
+
+1. Open http://localhost:5173
+2. Go to **Einstellungen** (Settings)
+3. Enter your Anthropic API Key and/or Discogs Token
+4. Press **Einstellungen speichern**
+
+---
+
+## Docker (Production)
+
+```bash
+# Copy and fill in .env
 cp .env.example .env
+
+# Build and run (app available at http://localhost:8000)
+docker compose up --build
 ```
 
-Edit `.env` and fill in the relevant keys:
-
-| Variable | Required for | Where to get it |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic backend | [console.anthropic.com/account/keys](https://console.anthropic.com/account/keys) |
-| `OLLAMA_URL` | Ollama backend | Default: `http://localhost:11434` |
-| `DISCOGS_TOKEN` | Always | [discogs.com/settings/developers](https://www.discogs.com/settings/developers) |
-
-> **Never commit your `.env` file!** It is listed in `.gitignore`.
-
-### 3. (Optional) Set up Ollama
-
-If you want to use a local model instead of Anthropic:
-
-```bash
-# Install Ollama: https://ollama.com/download
-ollama pull llava          # recommended vision model
-ollama serve               # starts the local server on :11434
-```
-
-### 4. Run the app
-
-```bash
-streamlit run app.py
-```
-
-The app opens automatically at `http://localhost:8501`.
+API keys can also be set via environment variables (`.env`).  
+The `settings.json` volume persists in-app changes across container restarts.
 
 ---
 
-## Vision Backends
+## Environment Variables
 
-| Backend | Models | Notes |
-|---|---|---|
-| **Anthropic** | `claude-opus-4-5`, `claude-sonnet-4-5`, `claude-haiku-4-5`, … | Cloud API, best accuracy |
-| **Ollama** | `llava`, `llava:13b`, `bakllava`, `moondream`, `gemma3`, … | Local/self-hosted, no data leaves your machine |
-
-Switch backends and select the model directly in the sidebar of the app.
-
----
-
-## User Journey
-
-1. Open the app and enter your API keys in the sidebar (or via `.env`).
-2. Choose your vision backend (Anthropic or Ollama) and model.
-3. Upload a photo of your CD shelf / stack.
-4. Click **▶ Analyse starten** – the app analyses the image and searches Discogs.
-5. Review the table: correct artist/album names, remove false positives, or trigger
-   **Manual Search** for unmatched entries.
-6. Click **🎵 … CDs zur Sammlung hinzufügen** – done!
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (fallback, UI settings take precedence) |
+| `DISCOGS_TOKEN` | Discogs Personal Access Token |
+| `OLLAMA_URL` | Ollama base URL (default: `http://localhost:11434`) |
 
 ---
 
-## Project structure
+## Workflow
 
-```
-discify/
-├── app.py              # Streamlit UI (main entry point)
-├── vision.py           # Vision AI: Anthropic Claude + Ollama backends
-├── discogs_helper.py   # Discogs REST API helpers
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variable template
-└── .gitignore
-```
-
----
-
-## Requirements
-
-- Python 3.10+
-- A Discogs account with a Personal Access Token
-- **Either** an Anthropic account (API key) **or** a local Ollama installation
+1. **Open app** → see your Discogs collection as a cover grid
+2. **Tap +** → photograph or upload your CD shelf
+3. **AI analyses** → each CD matched against Discogs
+4. **Review** → edit names, run manual searches if needed
+5. **Add** → one tap to sync all selected releases to Discogs

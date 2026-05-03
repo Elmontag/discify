@@ -1,6 +1,11 @@
 # Environment variables – never commit secrets
 .env
 
+# Local settings file (contains API keys)
+backend/settings.json
+backend/users.db
+backend/users.db-*
+
 # Python cache
 __pycache__/
 *.pyc
@@ -19,8 +24,9 @@ dist/
 build/
 *.egg-info/
 
-# Streamlit secrets
-.streamlit/secrets.toml
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
 
 # OS artefacts
 .DS_Store
