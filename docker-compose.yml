@@ -1,4 +1,19 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: discify
+      POSTGRES_USER: discify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-discify_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U discify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   discify:
     build:
       context: .
@@ -7,7 +22,18 @@ services:
     ports:
       - "8000:8000"
     environment:
+      DATABASE_URL: postgresql://discify:${POSTGRES_PASSWORD:-discify_dev}@db:5432/discify
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      JWT_SECRET: ${JWT_SECRET:-}
+      IMAGE_RETENTION_DAYS: ${IMAGE_RETENTION_DAYS:-7}
+    volumes:
+      - uploads:/app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:
+  uploads:
