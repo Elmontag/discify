@@ -35,6 +35,7 @@ export interface ScanResult {
   found: boolean;
   confidence?: 'high' | 'medium' | 'low';
   release_id: number | null;
+  master_id: number | null;
   title: string;
   album: string;
   artist: string;

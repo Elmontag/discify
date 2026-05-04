@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+﻿import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -55,6 +55,36 @@ interface ResultItem {
   editArtist: string;
   editAlbum: string;
   editCatno: string;
+  editYear: string;
+  editBarcode: string;
+  alternatives: AlternativeHit[];
+}
+
+function SuggestionCard({ suggestion: s, onAdd }: { suggestion: Suggestion; onAdd: () => void }) {
+  const thumb = s.thumb_url || s.cover_url;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.03)', padding: 10, marginBottom: 6 }}>
+      <View style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)' }}>
+        {thumb ? (
+          <Image source={{ uri: thumb }} style={{ width: 44, height: 44 }} resizeMode="cover" />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#9eaccf', fontSize: 20 }}>💿</Text>
+          </View>
+        )}
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: '#f5f7ff', fontWeight: '700', fontSize: 13 }} numberOfLines={1}>{s.artist}</Text>
+        <Text style={{ color: '#9eaccf', fontSize: 12 }} numberOfLines={1}>{s.album || s.title}</Text>
+        <Text style={{ color: 'rgba(158,172,207,0.6)', fontSize: 10 }} numberOfLines={1}>
+          {[s.year, s.catno, s.label].filter(Boolean).join(' · ') || '–'}
+        </Text>
+      </View>
+      <TouchableOpacity onPress={onAdd} style={{ backgroundColor: 'rgba(124,92,255,0.2)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
+        <Text style={{ color: '#a88eff', fontSize: 12, fontWeight: '700' }}>+ Hinzufügen</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 interface Props {
@@ -452,6 +482,9 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
           editArtist: scan.artist || scan.ai_artist,
           editAlbum: scan.album || scan.ai_album,
           editCatno: scan.catno || scan.ai_catalog_number,
+          editYear: scan.year != null ? String(scan.year) : '',
+          editBarcode: scan.ai_barcode || '',
+          alternatives: scan.alternatives ?? [],
         })),
       );
       setStep('results');
@@ -471,12 +504,12 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
           discogs_release_id: item.scan.release_id,
           title: item.editAlbum,
           artist: item.editArtist,
-          year: item.scan.year,
+          year: item.editYear ? Number(item.editYear) : item.scan.year,
           cover_url: item.scan.cover_url,
           thumb_url: item.scan.thumb_url,
           catno: item.editCatno,
           label: item.scan.label ?? '',
-          barcode: item.scan.ai_barcode ?? '',
+          barcode: (item.editBarcode || item.scan.ai_barcode) ?? '',
           source: 'scan',
         });
         added += 1;
@@ -539,11 +572,9 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
     <FlatList
       data={results}
       keyExtractor={(_, i) => String(i)}
-      numColumns={2}
-      contentContainerStyle={{ padding: 16, gap: 12 }}
-      columnWrapperStyle={{ gap: 12 }}
+      contentContainerStyle={{ padding: 12, gap: 10 }}
       ListHeaderComponent={
-        <View style={{ marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ color: '#9eaccf' }}>{results.length} CD{results.length !== 1 ? 's' : ''} erkannt</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={() => setStep('camera')} style={styles.btnSecondary}>
@@ -556,10 +587,10 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
         </View>
       }
       renderItem={({ item, index }) => (
-        <ScanResultCard
+        <ScanResultRow
           item={item}
-          onToggle={() => setResults((prev) => prev.map((r, i) => i === index ? { ...r, selected: !r.selected } : r))}
-          onEdit={(field, val) => setResults((prev) => prev.map((r, i) => i === index ? { ...r, [field]: val } : r))}
+          onUpdate={(updated) => setResults((prev) => prev.map((r, i) => i === index ? updated : r))}
+          onRemove={() => setResults((prev) => prev.filter((_, i) => i !== index))}
         />
       )}
     />
@@ -597,6 +628,9 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
           editArtist: scan.artist || scan.ai_artist,
           editAlbum: scan.album || scan.ai_album,
           editCatno: scan.catno || scan.ai_catalog_number,
+          editYear: scan.year != null ? String(scan.year) : '',
+          editBarcode: scan.ai_barcode || '',
+          alternatives: scan.alternatives ?? [],
         })),
       );
       setStep('results');
@@ -616,12 +650,12 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
           discogs_release_id: item.scan.release_id,
           title: item.editAlbum,
           artist: item.editArtist,
-          year: item.scan.year,
+          year: item.editYear ? Number(item.editYear) : item.scan.year,
           cover_url: item.scan.cover_url,
           thumb_url: item.scan.thumb_url,
           catno: item.editCatno,
           label: item.scan.label ?? '',
-          barcode: item.scan.ai_barcode ?? '',
+          barcode: (item.editBarcode || item.scan.ai_barcode) ?? '',
           source: 'scan',
         });
         added += 1;
@@ -661,11 +695,9 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
     <FlatList
       data={results}
       keyExtractor={(_, i) => String(i)}
-      numColumns={2}
-      contentContainerStyle={{ padding: 16, gap: 12 }}
-      columnWrapperStyle={{ gap: 12 }}
+      contentContainerStyle={{ padding: 12, gap: 10 }}
       ListHeaderComponent={
-        <View style={{ marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ color: '#9eaccf' }}>{results.length} CD{results.length !== 1 ? 's' : ''} erkannt</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={() => { setStep('idle'); setResults([]); }} style={styles.btnSecondary}>
@@ -678,100 +710,258 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
         </View>
       }
       renderItem={({ item, index }) => (
-        <ScanResultCard
+        <ScanResultRow
           item={item}
-          onToggle={() => setResults((prev) => prev.map((r, i) => i === index ? { ...r, selected: !r.selected } : r))}
-          onEdit={(field, val) => setResults((prev) => prev.map((r, i) => i === index ? { ...r, [field]: val } : r))}
+          onUpdate={(updated) => setResults((prev) => prev.map((r, i) => i === index ? updated : r))}
+          onRemove={() => setResults((prev) => prev.filter((_, i) => i !== index))}
         />
       )}
     />
   );
 }
 
-// ─── Shared Components ────────────────────────────────────────────────────────
+// ─── ScanResultRow (replaces ScanResultCard grid) ─────────────────────────────
 
-function SuggestionCard({ suggestion: s, onAdd }: { suggestion: Suggestion; onAdd: () => void }) {
-  const CARD_W = (SCREEN_W - 32 - 12) / 2;
-  return (
-    <View style={[styles.suggestionCard, { width: CARD_W }]}>
-      {s.cover_url ? (
-        <Image source={{ uri: s.cover_url }} style={{ width: CARD_W, height: CARD_W }} resizeMode="cover" />
-      ) : (
-        <View style={{ width: CARD_W, height: CARD_W, backgroundColor: '#1a2a3f', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: '#9eaccf', fontSize: 28 }}>💿</Text>
-        </View>
-      )}
-      <View style={{ padding: 8 }}>
-        <Text style={{ color: '#f5f7ff', fontWeight: '600', fontSize: 12 }} numberOfLines={2}>
-          {s.album || s.title}
-        </Text>
-        <Text style={{ color: '#9eaccf', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{s.artist}</Text>
-        {s.year ? <Text style={{ color: '#9eaccf', fontSize: 11 }}>{s.year}</Text> : null}
-        {s.catno ? <Text style={{ color: '#9eaccf', fontSize: 10, opacity: 0.7 }} numberOfLines={1}>{s.catno}</Text> : null}
-        {s.label ? <Text style={{ color: '#9eaccf', fontSize: 10, opacity: 0.7 }} numberOfLines={1}>{s.label}</Text> : null}
-        <TouchableOpacity onPress={onAdd} style={[styles.btnPrimary, { marginTop: 8, paddingVertical: 8 }]}>
-          <Plus size={14} color="#fff" />
-          <Text style={[styles.btnPrimaryText, { fontSize: 12 }]}>Hinzufügen</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function ScanResultCard({
+function ScanResultRow({
   item,
-  onToggle,
-  onEdit,
+  onUpdate,
+  onRemove,
 }: {
   item: ResultItem;
-  onToggle: () => void;
-  onEdit: (field: 'editArtist' | 'editAlbum' | 'editCatno', val: string) => void;
+  onUpdate: (updated: ResultItem) => void;
+  onRemove: () => void;
 }) {
-  const CARD_W = (SCREEN_W - 32 - 12) / 2;
   const [expanded, setExpanded] = useState(false);
+  const [showAlts, setShowAlts] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [originalItem] = useState<ResultItem>(item);
+
+  const thumb = item.scan.cover_url || item.scan.thumb_url;
+  const isAltActive = item.scan.release_id !== originalItem.scan.release_id;
+  const metaStr = [
+    item.editYear,
+    item.editBarcode ? `EAN: ${item.editBarcode}` : null,
+    item.editCatno ? `Kat: ${item.editCatno}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const STATUS_LABELS: Record<string, string> = {
+    new: 'Neu',
+    in_collection: 'In Sammlung',
+    not_found: 'Nicht gefunden',
+  };
+
+  const STATUS_COLORS: Record<string, string> = {
+    new: '#86f0c9',
+    in_collection: '#ffe29e',
+    not_found: '#ffb0b0',
+  };
+
+  async function fetchAlternatives() {
+    setRefreshing(true);
+    try {
+      const res = await api.discogsSearchSuggestions({
+        artist: item.editArtist || undefined,
+        album: item.editAlbum || undefined,
+        catno: item.editCatno || undefined,
+        barcode: item.editBarcode || undefined,
+      });
+      const alts: AlternativeHit[] = (res.results ?? []).slice(1).map((r: any) => ({
+        release_id: r.release_id ?? null,
+        master_id: r.master_id ?? null,
+        title: r.title ?? '',
+        album: r.album ?? '',
+        artist: r.artist ?? '',
+        year: r.year ?? null,
+        cover_url: r.cover_url ?? '',
+        thumb_url: r.thumb_url ?? '',
+        catno: r.catno ?? '',
+        label: r.label ?? '',
+      }));
+      onUpdate({ ...item, alternatives: alts });
+      setShowAlts(true);
+    } catch {
+      // silent
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function applyAlternative(alt: AlternativeHit) {
+    onUpdate({
+      ...item,
+      scan: {
+        ...item.scan,
+        release_id: alt.release_id,
+        master_id: alt.master_id,
+        title: alt.title,
+        album: alt.album,
+        artist: alt.artist,
+        year: alt.year,
+        cover_url: alt.cover_url,
+        thumb_url: alt.thumb_url,
+        catno: alt.catno,
+        label: alt.label,
+        found: true,
+      },
+      editArtist: alt.artist,
+      editAlbum: alt.album,
+      editCatno: alt.catno,
+      editYear: alt.year != null ? String(alt.year) : '',
+      selected: true,
+    });
+    setShowAlts(false);
+  }
+
+  function restoreOriginal() {
+    onUpdate(originalItem);
+    setShowAlts(false);
+  }
+
+  const status = item.scan.found ? (item.scan.catno && item.editCatno ? 'new' : 'new') : 'not_found';
 
   return (
-    <View style={[styles.suggestionCard, { width: CARD_W, opacity: item.selected ? 1 : 0.5 }]}>
-      {item.scan.cover_url ? (
-        <Image source={{ uri: item.scan.cover_url }} style={{ width: CARD_W, height: CARD_W }} resizeMode="cover" />
-      ) : (
-        <View style={{ width: CARD_W, height: CARD_W, backgroundColor: '#1a2a3f', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: '#9eaccf', fontSize: 28 }}>💿</Text>
+    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginBottom: 2 }}>
+      {/* Collapsed row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 }}>
+        {/* Thumbnail */}
+        <View style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', backgroundColor: '#1a2a3f', flexShrink: 0 }}>
+          {thumb ? (
+            <Image source={{ uri: thumb }} style={{ width: 48, height: 48 }} resizeMode="cover" />
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 20 }}>💿</Text>
+            </View>
+          )}
         </View>
-      )}
-      <View style={{ padding: 8, gap: 4 }}>
-        <TextInput
-          style={styles.inlineInput}
-          value={item.editAlbum}
-          onChangeText={(v) => onEdit('editAlbum', v)}
-          placeholder="Album"
-          placeholderTextColor="#9eaccf"
-        />
-        <TextInput
-          style={styles.inlineInput}
-          value={item.editArtist}
-          onChangeText={(v) => onEdit('editArtist', v)}
-          placeholder="Interpret"
-          placeholderTextColor="#9eaccf"
-        />
-        {expanded && (
-          <TextInput
-            style={styles.inlineInput}
-            value={item.editCatno}
-            onChangeText={(v) => onEdit('editCatno', v)}
-            placeholder="Katalognummer"
-            placeholderTextColor="#9eaccf"
-          />
-        )}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-          <TouchableOpacity onPress={() => setExpanded((e) => !e)}>
-            <Text style={{ color: '#9eaccf', fontSize: 10 }}>{expanded ? 'Weniger' : 'Mehr'}</Text>
+
+        {/* Info */}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: STATUS_COLORS[item.scan.found ? 'new' : 'not_found'], flexShrink: 0 }}>
+              {STATUS_LABELS[item.scan.found ? 'new' : 'not_found']}
+            </Text>
+          </View>
+          <Text style={{ color: '#f5f7ff', fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
+            {item.editArtist}
+          </Text>
+          <Text style={{ color: '#9eaccf', fontSize: 11 }} numberOfLines={1}>
+            {item.editAlbum}
+          </Text>
+          {metaStr ? (
+            <Text style={{ color: 'rgba(158,172,207,0.6)', fontSize: 10 }} numberOfLines={1}>
+              {metaStr} · –
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Actions */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {/* Toggle select */}
+          <TouchableOpacity
+            onPress={() => onUpdate({ ...item, selected: !item.selected })}
+            style={{
+              width: 20, height: 20, borderRadius: 4,
+              borderWidth: 1.5,
+              borderColor: item.selected ? '#7c5cff' : 'rgba(255,255,255,0.2)',
+              backgroundColor: item.selected ? '#7c5cff' : 'rgba(255,255,255,0.05)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {item.selected ? <CheckCircle2 size={12} color="#fff" /> : null}
           </TouchableOpacity>
-          <TouchableOpacity onPress={onToggle}>
-            <CheckCircle2 size={18} color={item.selected ? '#86f0c9' : '#9eaccf'} />
+          {/* Remove */}
+          <TouchableOpacity onPress={onRemove} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <X size={14} color="#9eaccf" />
+          </TouchableOpacity>
+          {/* Expand */}
+          <TouchableOpacity onPress={() => setExpanded((e) => !e)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={{ color: '#9eaccf', fontSize: 16, lineHeight: 18 }}>{expanded ? '▲' : '▼'}</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Expanded panel */}
+      {expanded && (
+        <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', padding: 12, gap: 8 }}>
+          {([
+            ['Interpret', 'editArtist', item.editArtist],
+            ['Album', 'editAlbum', item.editAlbum],
+            ['Jahr', 'editYear', item.editYear],
+            ['EAN / Barcode', 'editBarcode', item.editBarcode],
+            ['Katalognummer', 'editCatno', item.editCatno],
+          ] as [string, keyof ResultItem, string][]).map(([label, field, value]) => (
+            <View key={field}>
+              <Text style={{ color: '#9eaccf', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{label}</Text>
+              <TextInput
+                style={styles.inlineInput}
+                value={value ?? ''}
+                onChangeText={(v) => onUpdate({ ...item, [field]: v })}
+                placeholder={label}
+                placeholderTextColor="#9eaccf"
+                keyboardType={field === 'editYear' ? 'numeric' : 'default'}
+              />
+            </View>
+          ))}
+
+          {/* Action buttons */}
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            <TouchableOpacity
+              onPress={fetchAlternatives}
+              disabled={refreshing}
+              style={[styles.btnSecondary, { paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            >
+              {refreshing ? <ActivityIndicator size="small" color="#9eaccf" /> : <Loader2 size={12} color="#9eaccf" />}
+              <Text style={styles.btnSecondaryText}>{refreshing ? 'Suche…' : showAlts ? 'Aktualisieren' : 'Alternativen'}</Text>
+            </TouchableOpacity>
+            {isAltActive && (
+              <TouchableOpacity
+                onPress={restoreOriginal}
+                style={[styles.btnSecondary, { paddingHorizontal: 12, paddingVertical: 8, borderColor: 'rgba(124,92,255,0.3)' }]}
+              >
+                <Text style={[styles.btnSecondaryText, { color: '#a88eff' }]}>↩ Original</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Alternatives list */}
+          {showAlts && item.alternatives.length > 0 && (
+            <View style={{ gap: 6, marginTop: 4 }}>
+              <Text style={{ color: '#9eaccf', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {item.alternatives.length} Vorschlag{item.alternatives.length !== 1 ? 'e' : ''}
+              </Text>
+              {item.alternatives.slice(0, 8).map((alt, i) => {
+                const altThumb = alt.thumb_url || alt.cover_url;
+                return (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.02)', padding: 8 }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1a2a3f', flexShrink: 0 }}>
+                      {altThumb ? (
+                        <Image source={{ uri: altThumb }} style={{ width: 36, height: 36 }} resizeMode="cover" />
+                      ) : (
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ fontSize: 14 }}>💿</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ color: '#f5f7ff', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{alt.artist}</Text>
+                      <Text style={{ color: '#9eaccf', fontSize: 10 }} numberOfLines={1}>{alt.album || alt.title}</Text>
+                      <Text style={{ color: 'rgba(158,172,207,0.6)', fontSize: 10 }} numberOfLines={1}>
+                        {[alt.year, alt.catno, alt.label].filter(Boolean).join(' · ') || '–'}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => applyAlternative(alt)}
+                      style={{ backgroundColor: 'rgba(124,92,255,0.2)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 }}
+                    >
+                      <Text style={{ color: '#a88eff', fontSize: 11, fontWeight: '700' }}>Wählen</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }
