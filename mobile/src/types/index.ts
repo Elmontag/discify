@@ -35,6 +35,7 @@ export interface ScanResult {
   ai_edition?: string;
   found: boolean;
   confidence?: 'high' | 'medium' | 'low';
+  search_reason?: string;
   is_suspect?: boolean;
   match_details?: {
     artist_sim: number;

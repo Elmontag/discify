@@ -50,6 +50,7 @@ from discogs_helper import (
     remove_from_collection,
     get_release_details,
     _cross_validate,
+    validate_and_fix_ean13,
 )
 from vision import ANTHROPIC_MODELS, OLLAMA_MODELS, identify_cds_from_image
 
@@ -871,9 +872,17 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
             'confidence': 'medium',
         })
 
+        # If catno is empty but sticker_text looks like a catalog number, try it
+        effective_catno = catalog_number
+        if not effective_catno and sticker_text:
+            # Use sticker_text as catno hint if it has alphanumeric structure (≥4 chars, contains digit)
+            s = sticker_text.strip()
+            if len(s) >= 4 and any(c.isdigit() for c in s) and any(c.isalpha() for c in s):
+                effective_catno = s
+
         # Priority chain: catno → barcode → artist+album text (all merged + ranked)
-        best, alternatives, confidence = search_candidates(
-            catno=catalog_number,
+        best, alternatives, confidence, search_reason = search_candidates(
+            catno=effective_catno,
             barcode=barcode,
             artist=artist,
             album=album,
@@ -890,6 +899,7 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
                 ai_barcode=barcode,
                 discogs_result=best,
                 search_confidence=confidence,
+                search_reason=search_reason,
             )
             is_suspect = match_details['is_suspect']
 
@@ -901,6 +911,7 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
             'ai_edition': edition,
             'found': best is not None,
             'confidence': confidence,
+            'search_reason': search_reason,
             'match_details': match_details,
             'is_suspect': is_suspect,
             'release_id': best.get('release_id') if best else None,

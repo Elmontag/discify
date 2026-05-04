@@ -34,6 +34,19 @@ const CONFIDENCE_LABELS = {
   low: '● Unsicher',
 }
 
+const REASON_LABELS: Record<string, string> = {
+  catno_hit: '📋 via Katalognr.',
+  barcode_hit: '📦 via Barcode',
+  barcode_ean_corrected: '📦 via Barcode (EAN korrigiert)',
+  text_hit: '🔤 via Text',
+  suspect_replaced_by_text: '🔄 Texttreffer bevorzugt',
+  not_found: 'Nicht gefunden',
+  not_found_catno: 'Nicht gefunden (Katalognr.)',
+  not_found_barcode: 'Nicht gefunden (Barcode)',
+  not_found_catno_barcode: 'Nicht gefunden (Katalogl. + Barcode)',
+  not_found_text: 'Nicht gefunden (Text)',
+}
+
 function AltRow({ alt, onSelect }: { alt: AlternativeHit; onSelect: () => void }) {
   const thumb = alt.thumb_url || alt.cover_url
   return (
@@ -266,6 +279,16 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
             <div className="rounded-xl border border-[#ff9a3c]/25 bg-[#ff9a3c]/8 px-3 py-2 text-[10px] text-[#ffb570]">
               <p className="font-bold mb-0.5">⚠ Verdächtiger Treffer – bitte Ergebnis prüfen</p>
               <p>Interpret-Ähnlichkeit: {(item.match_details.artist_sim * 100).toFixed(0)} % · Album-Ähnlichkeit: {(item.match_details.album_sim * 100).toFixed(0)} % · Katalognr.: {item.match_details.catno_match}</p>
+            </div>
+          )}
+          {!item.found && item.search_reason && (
+            <div className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-[10px] text-[#9eaccf]">
+              {REASON_LABELS[item.search_reason] ?? item.search_reason}
+            </div>
+          )}
+          {item.found && item.search_reason && !item.is_suspect && (
+            <div className="text-[10px] text-[#9eaccf]/60 px-0.5">
+              {REASON_LABELS[item.search_reason] ?? item.search_reason}
             </div>
           )}
           <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
