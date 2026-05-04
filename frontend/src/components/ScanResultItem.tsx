@@ -145,7 +145,8 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
         catno: r.catno,
         label: r.label,
       }))
-      if (!item.found && results.length > 0) {
+      if (results.length > 0) {
+        // Always apply the best result from the re-search (not just when not found)
         const best = results[0]
         const inCollection = best.release_id != null && collectionIds.has(best.release_id)
         onChange({
@@ -156,21 +157,22 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
           artist: best.artist,
           release_id: best.release_id,
           master_id: best.master_id ?? null,
-          year: best.year ? String(best.year) : '',
+          year: best.year ? String(best.year) : item.year,
           cover_url: best.cover_url,
           thumb_url: best.thumb_url,
-          catno: best.catno,
-          label: best.label,
+          catno: best.catno || item.catno,
+          label: best.label || item.label,
+          in_collection: inCollection,
           status: inCollection ? 'in_collection' : 'new',
           include: !inCollection,
           alternatives: alts,
         })
       } else {
-        onChange({ ...item, alternatives: alts })
+        onChange({ ...item, found: false, status: 'not_found', alternatives: [] })
       }
-      setShowAlts(true)
+      setShowAlts(results.length > 1)
     } catch {
-      // silent
+      setSearchError('Suche fehlgeschlagen.')
     } finally {
       setRefreshing(false)
     }
@@ -316,7 +318,7 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
               className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/4 px-3 py-1.5 text-xs font-semibold text-[#9eaccf] hover:text-[#a88eff] transition-colors disabled:opacity-50"
             >
               <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? 'Suche…' : showAlts ? 'Aktualisieren' : 'Alternativen'}
+              {refreshing ? 'Suche…' : showAlts ? 'Neu suchen' : 'Discogs aktualisieren'}
             </button>
             {isAlternativeActive && (
               <button

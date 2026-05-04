@@ -770,7 +770,8 @@ function ScanResultRow({
         catno: item.editCatno || undefined,
         barcode: item.editBarcode || undefined,
       });
-      const alts: AlternativeHit[] = (res.results ?? []).slice(1).map((r: any) => ({
+      const results: any[] = res.results ?? [];
+      const alts: AlternativeHit[] = results.slice(1).map((r: any) => ({
         release_id: r.release_id ?? null,
         master_id: r.master_id ?? null,
         title: r.title ?? '',
@@ -782,8 +783,36 @@ function ScanResultRow({
         catno: r.catno ?? '',
         label: r.label ?? '',
       }));
-      onUpdate({ ...item, alternatives: alts });
-      setShowAlts(true);
+      if (results.length > 0) {
+        // Always apply best result — user triggered this after editing fields
+        const best = results[0];
+        onUpdate({
+          ...item,
+          scan: {
+            ...item.scan,
+            release_id: best.release_id ?? null,
+            master_id: best.master_id ?? null,
+            title: best.title ?? '',
+            album: best.album ?? '',
+            artist: best.artist ?? '',
+            year: best.year ?? null,
+            cover_url: best.cover_url ?? '',
+            thumb_url: best.thumb_url ?? '',
+            catno: best.catno ?? '',
+            label: best.label ?? '',
+            found: true,
+          },
+          editArtist: best.artist ?? item.editArtist,
+          editAlbum: best.album ?? item.editAlbum,
+          editYear: best.year != null ? String(best.year) : item.editYear,
+          editCatno: best.catno || item.editCatno,
+          alternatives: alts,
+          selected: true,
+        });
+      } else {
+        onUpdate({ ...item, alternatives: [], scan: { ...item.scan, found: false } });
+      }
+      setShowAlts(results.length > 1);
     } catch {
       // silent
     } finally {
@@ -930,7 +959,7 @@ function ScanResultRow({
               style={[styles.btnSecondary, { paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
             >
               {refreshing ? <ActivityIndicator size="small" color="#9eaccf" /> : <Loader2 size={12} color="#9eaccf" />}
-              <Text style={styles.btnSecondaryText}>{refreshing ? 'Suche…' : showAlts ? 'Aktualisieren' : 'Alternativen'}</Text>
+              <Text style={styles.btnSecondaryText}>{refreshing ? 'Suche…' : showAlts ? 'Neu suchen' : 'Discogs aktualisieren'}</Text>
             </TouchableOpacity>
             {isAltActive && (
               <TouchableOpacity
