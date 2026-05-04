@@ -1,4 +1,4 @@
-import { Disc3, Settings, Users, type LucideIcon } from 'lucide-react'
+import { Disc3, Settings, User, Users, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -10,6 +10,7 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { to: '/', label: 'Sammlung', Icon: Disc3 },
+  { to: '/account', label: 'Konto', Icon: User },
   { to: '/settings', label: 'Einstellungen', Icon: Settings },
 ]
 

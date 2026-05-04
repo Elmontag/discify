@@ -4,6 +4,7 @@ import type {
   DiscogsHit,
   HealthStatus,
   Models,
+  ScanHistoryItem,
   ScanResponse,
   Settings,
   UserMe,
@@ -64,6 +65,25 @@ async function request<T>(path: string, options: RequestInit = {}) {
   return requestUrl<T>(`${BASE}${path}`, options)
 }
 
+async function authRequest<T>(path: string, options: RequestInit = {}) {
+  return requestUrl<T>(path, options)
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Bild konnte nicht gelesen werden.'))
+        return
+      }
+      resolve(reader.result)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('Bild konnte nicht gelesen werden.'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export const api = {
   login: (email: string, password: string) =>
     requestUrl<{ access_token: string; token_type: string }>('/auth/login', {
@@ -76,12 +96,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
-  me: () => requestUrl<UserMe>('/auth/me'),
+  me: () => authRequest<UserMe>('/auth/me'),
+  updateProfile: (data: { display_name?: string; email?: string; password?: string }) =>
+    authRequest<UserMe>('/auth/me/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getDiscogsSettings: () =>
+    authRequest<{ discogs_token_set: boolean; discogs_username: string | null }>('/auth/me/discogs'),
+  updateDiscogsToken: (token: string) =>
+    authRequest<{ discogs_token_set: boolean }>('/auth/me/discogs', {
+      method: 'PUT',
+      body: JSON.stringify({ discogs_token: token }),
+    }),
+  getOllamaSettings: () =>
+    authRequest<{ ollama_url: string; global_ollama_url: string }>('/auth/me/ollama'),
+  updateOllamaUrl: (url: string) =>
+    authRequest<{ ollama_url: string }>('/auth/me/ollama', {
+      method: 'PUT',
+      body: JSON.stringify({ ollama_url: url }),
+    }),
+  getScanHistory: (page = 1) =>
+    authRequest<{ total: number; page: number; per_page: number; items: ScanHistoryItem[] }>(
+      `/auth/me/scans?page=${page}`,
+    ),
 
   // Settings
   getSettings: () => request<Settings>('/settings'),
   updateSettings: (data: Partial<Settings>) =>
-    request<Settings>('/settings', {
+    authRequest<Settings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
@@ -92,51 +132,94 @@ export const api = {
 
   // Collection
   getCollection: (page = 1, perPage = 50) =>
-    request<CollectionResponse>(`/collection?page=${page}&per_page=${perPage}`),
+    authRequest<CollectionResponse>(`/api/collection?page=${page}&per_page=${perPage}`),
 
   // Scan
-  scanImage: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return fetch(`${BASE}/scan`, {
-      method: 'POST',
-      body: form,
-      headers: buildHeaders({ body: form }),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || `HTTP ${res.status}`)
-      }
-      return res.json() as Promise<ScanResponse>
-    })
+  scanImage: async (file: File) => {
+    const imageBase64 = await fileToBase64(file)
+    const results = await authRequest<Array<{ artist: string; album: string; confidence: string }>>(
+      '/api/scan',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          image_base64: imageBase64,
+          mime_type: file.type || 'image/jpeg',
+        }),
+      },
+    )
+
+    const albums = await Promise.all(
+      results.map(async (item, idx) => {
+        try {
+          const hit = await authRequest<DiscogsHit>('/api/discogs/search', {
+            method: 'POST',
+            body: JSON.stringify({ artist: item.artist, album: item.album }),
+          })
+          return {
+            idx,
+            recognized_artist: item.artist,
+            recognized_album: item.album,
+            found: true,
+            discogs_title: hit.title,
+            discogs_artist: hit.artist,
+            release_id: hit.release_id,
+            master_id: hit.master_id,
+            year: hit.year ? String(hit.year) : '',
+            cover_url: hit.cover_url ?? '',
+            thumb_url: hit.thumb_url ?? '',
+            in_collection: false,
+            status: 'new' as const,
+            include: true,
+          }
+        } catch {
+          return {
+            idx,
+            recognized_artist: item.artist,
+            recognized_album: item.album,
+            found: false,
+            discogs_title: '',
+            discogs_artist: '',
+            release_id: null,
+            master_id: null,
+            year: '',
+            cover_url: '',
+            thumb_url: '',
+            in_collection: false,
+            status: 'not_found' as const,
+            include: false,
+          }
+        }
+      }),
+    )
+
+    return { albums, username: null } satisfies ScanResponse
   },
 
   // Discogs
   discogsSearch: (artist: string, album: string) =>
-    request<DiscogsHit>('/discogs/search', {
+    authRequest<DiscogsHit>('/api/discogs/search', {
       method: 'POST',
       body: JSON.stringify({ artist, album }),
     }),
   discogsManualSearch: (query: string) =>
-    request<DiscogsHit>('/discogs/search/manual', {
+    authRequest<DiscogsHit>('/api/discogs/search/manual', {
       method: 'POST',
       body: JSON.stringify({ query }),
     }),
   discogsAdd: (releaseId: number) =>
-    request<{ success: boolean; release_id: number }>('/discogs/add', {
+    authRequest<{ success: boolean; release_id: number }>('/api/discogs/add', {
       method: 'POST',
       body: JSON.stringify({ release_id: releaseId }),
     }),
 
-  adminListUsers: () => requestUrl<AdminUser[]>('/admin/users'),
+  adminListUsers: () => authRequest<AdminUser[]>('/admin/users'),
   adminUpdateUser: (
     id: number,
     update: { tier?: 'free' | 'basic' | 'pro'; is_admin?: boolean },
   ) =>
-    requestUrl<AdminUser>(`/admin/users/${id}`, {
+    authRequest<AdminUser>(`/admin/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(update),
     }),
-  adminDeleteUser: (id: number) =>
-    requestUrl<void>(`/admin/users/${id}`, { method: 'DELETE' }),
+  adminDeleteUser: (id: number) => authRequest<void>(`/admin/users/${id}`, { method: 'DELETE' }),
 }

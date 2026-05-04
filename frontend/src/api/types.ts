@@ -6,17 +6,29 @@ export interface Settings {
   ollama_model: string
   ollama_url: string
   anthropic_api_key: string
-  discogs_token: string
   anthropic_api_key_set?: boolean
-  discogs_token_set?: boolean
 }
 
 export interface UserMe {
+  id: number
   email: string
+  display_name: string | null
   tier: string
   scans_used: number
   scans_limit: number
   is_admin: boolean
+  discogs_token_set: boolean
+  ollama_url: string
+  created_at?: string | null
+}
+
+export interface ScanHistoryItem {
+  id: number
+  created_at: string
+  has_image: boolean
+  analysis_json: string
+  discogs_results_json: string
+  status: string
 }
 
 export interface AdminUser {
@@ -29,8 +41,6 @@ export interface AdminUser {
 }
 
 export interface HealthStatus {
-  discogs_connected: boolean
-  discogs_username: string | null
   anthropic_key_set: boolean
   ollama_url: string
   vision_backend: string

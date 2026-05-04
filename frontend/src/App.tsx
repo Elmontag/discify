@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import AdminPage from './pages/AdminPage'
 import AuthPage from './pages/AuthPage'
 import CollectionPage from './pages/CollectionPage'
+import AccountPage from './pages/AccountPage'
 import SettingsPage from './pages/SettingsPage'
 import ScanSheet from './pages/ScanSheet'
 
@@ -26,6 +27,14 @@ function AppShell() {
             element={
               <ProtectedRoute>
                 <CollectionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <ProtectedRoute>
+                <AccountPage />
               </ProtectedRoute>
             }
           />
