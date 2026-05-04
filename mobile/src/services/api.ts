@@ -150,4 +150,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(params),
     }),
+
+  discogsAdd: (releaseId: number) =>
+    request<{ success: boolean; release_id: number }>('/api/discogs/add', {
+      method: 'POST',
+      body: JSON.stringify({ release_id: releaseId }),
+    }),
 };

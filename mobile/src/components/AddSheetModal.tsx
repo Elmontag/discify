@@ -188,7 +188,7 @@ function SearchTab({ onAdded }: { onAdded: () => void }) {
     }
   }
 
-  function addSuggestion(s: Suggestion) {
+  async function addSuggestion(s: Suggestion) {
     if (albumExists(s.release_id)) {
       Alert.alert('Bereits vorhanden', 'Dieses Album ist bereits in deiner Sammlung.');
       return;
@@ -205,6 +205,7 @@ function SearchTab({ onAdded }: { onAdded: () => void }) {
       barcode: '',
       source: 'manual',
     });
+    api.discogsAdd(s.release_id).catch(() => {});
     Alert.alert('Hinzugefügt', `"${s.album || s.title}" wurde zur Sammlung hinzugefügt.`, [
       { text: 'OK', onPress: onAdded },
     ]);
@@ -307,7 +308,7 @@ function BarcodeTab({ onAdded }: { onAdded: () => void }) {
     lookupBarcode(result.data);
   }
 
-  function addSuggestion(s: Suggestion) {
+  async function addSuggestion(s: Suggestion) {
     if (albumExists(s.release_id)) {
       Alert.alert('Bereits vorhanden', 'Dieses Album ist bereits in deiner Sammlung.');
       return;
@@ -324,6 +325,7 @@ function BarcodeTab({ onAdded }: { onAdded: () => void }) {
       barcode: barcode,
       source: 'barcode',
     });
+    api.discogsAdd(s.release_id).catch(() => {});
     Alert.alert('Hinzugefügt', `"${s.album || s.title}" wurde zur Sammlung hinzugefügt.`, [
       { text: 'OK', onPress: onAdded },
     ]);
@@ -496,7 +498,7 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
 
   function addSelected() {
     const toAdd = results.filter((r) => r.selected && r.scan.found);
-    let added = 0;
+    const addedIds: number[] = [];
     for (const item of toAdd) {
       if (!item.scan.release_id) continue;
       if (!albumExists(item.scan.release_id)) {
@@ -512,10 +514,11 @@ function AiCameraTab({ onAdded }: { onAdded: () => void }) {
           barcode: (item.editBarcode || item.scan.ai_barcode) ?? '',
           source: 'scan',
         });
-        added += 1;
+        addedIds.push(item.scan.release_id);
       }
     }
-    Alert.alert('Fertig', `${added} Album${added !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
+    Promise.allSettled(addedIds.map((id) => api.discogsAdd(id)));
+    Alert.alert('Fertig', `${addedIds.length} Album${addedIds.length !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
       { text: 'OK', onPress: onAdded },
     ]);
   }
@@ -642,7 +645,7 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
 
   function addSelected() {
     const toAdd = results.filter((r) => r.selected && r.scan.found);
-    let added = 0;
+    const addedIds: number[] = [];
     for (const item of toAdd) {
       if (!item.scan.release_id) continue;
       if (!albumExists(item.scan.release_id)) {
@@ -658,10 +661,11 @@ function AiFileTab({ onAdded }: { onAdded: () => void }) {
           barcode: (item.editBarcode || item.scan.ai_barcode) ?? '',
           source: 'scan',
         });
-        added += 1;
+        addedIds.push(item.scan.release_id);
       }
     }
-    Alert.alert('Fertig', `${added} Album${added !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
+    Promise.allSettled(addedIds.map((id) => api.discogsAdd(id)));
+    Alert.alert('Fertig', `${addedIds.length} Album${addedIds.length !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
       { text: 'OK', onPress: onAdded },
     ]);
   }

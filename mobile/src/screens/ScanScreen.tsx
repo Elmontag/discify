@@ -76,7 +76,7 @@ export default function ScanScreen() {
 
   async function addSelected() {
     const toAdd = results.filter((r) => r.selected && r.scan.found);
-    let added = 0;
+    const addedIds: number[] = [];
     for (const item of toAdd) {
       if (!item.scan.release_id) continue;
       if (!albumExists(item.scan.release_id)) {
@@ -92,10 +92,11 @@ export default function ScanScreen() {
           barcode: item.scan.ai_barcode ?? '',
           source: 'scan',
         });
-        added += 1;
+        addedIds.push(item.scan.release_id);
       }
     }
-    Alert.alert('Fertig', `${added} Album${added !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
+    Promise.allSettled(addedIds.map((id) => api.discogsAdd(id)));
+    Alert.alert('Fertig', `${addedIds.length} Album${addedIds.length !== 1 ? 's' : ''} zur Sammlung hinzugefügt.`, [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   }
