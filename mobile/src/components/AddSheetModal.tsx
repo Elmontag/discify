@@ -812,9 +812,9 @@ function ScanResultRow({
       } else {
         onUpdate({ ...item, alternatives: [], scan: { ...item.scan, found: false } });
       }
-      setShowAlts(results.length > 1);
-    } catch {
-      // silent
+      setShowAlts(true);
+    } catch (e) {
+      console.error('fetchAlternatives error:', e);
     } finally {
       setRefreshing(false);
     }

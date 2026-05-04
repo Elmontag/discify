@@ -974,7 +974,7 @@ def discogs_manual_search(body: ManualSearchRequest, current_user: dict = Depend
 @app.post('/api/discogs/suggestions')
 def discogs_suggestions(body: SuggestionsRequest, current_user: dict = Depends(get_current_user)):
     token = current_user.get('discogs_token', '')
-    best, alternatives, confidence = search_candidates(
+    best, alternatives, confidence, _reason = search_candidates(
         catno=body.catno,
         barcode=body.barcode,
         artist=body.artist,

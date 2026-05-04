@@ -170,7 +170,7 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
       } else {
         onChange({ ...item, found: false, status: 'not_found', alternatives: [] })
       }
-      setShowAlts(results.length > 1)
+      setShowAlts(true)
     } catch {
       setSearchError('Suche fehlgeschlagen.')
     } finally {
