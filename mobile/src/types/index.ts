@@ -28,10 +28,16 @@ export interface DiscogsRelease {
 }
 
 export interface UserInfo {
+  id: number;
   email: string;
+  display_name?: string | null;
   tier: 'free' | 'basic' | 'pro';
   scans_used: number;
   scans_limit: number;
+  is_admin?: boolean;
+  discogs_token_set?: boolean;
+  ollama_url?: string;
+  created_at?: string | null;
 }
 
 export interface AuthTokens {

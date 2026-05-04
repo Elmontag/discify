@@ -2,13 +2,19 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import {
+  CheckCircle2,
+  Disc3,
+  LogOut,
+  Save,
+  Server,
+  User,
+} from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import type { UserInfo } from '../types';
@@ -16,29 +22,51 @@ import type { UserInfo } from '../types';
 export default function SettingsScreen() {
   const { logout } = useAuth();
   const [discogsToken, setDiscogsToken] = useState('');
+  const [discogsTokenSet, setDiscogsTokenSet] = useState(false);
+  const [discogsUsername, setDiscogsUsername] = useState<string | null>(null);
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-  const [useOllama, setUseOllama] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingDiscogs, setSavingDiscogs] = useState(false);
+  const [savingOllama, setSavingOllama] = useState(false);
 
   useEffect(() => {
-    SecureStore.getItemAsync('discogs_token').then((v) => v && setDiscogsToken(v));
-    SecureStore.getItemAsync('ollama_url').then((v) => v && setOllamaUrl(v));
-    SecureStore.getItemAsync('use_ollama').then((v) => setUseOllama(v === 'true'));
-    api.me().then(setUserInfo).catch(() => {});
+    Promise.all([api.me(), api.getDiscogsSettings(), api.getOllamaSettings()])
+      .then(([me, discogs, ollama]) => {
+        setUserInfo(me);
+        setDiscogsTokenSet(discogs.discogs_token_set);
+        setDiscogsUsername(discogs.discogs_username);
+        setOllamaUrl(ollama.ollama_url || ollama.global_ollama_url || 'http://localhost:11434');
+      })
+      .catch(() => {});
   }, []);
 
-  async function save() {
-    setSaving(true);
+  async function saveDiscogs() {
+    setSavingDiscogs(true);
     try {
-      await SecureStore.setItemAsync('discogs_token', discogsToken);
-      await SecureStore.setItemAsync('ollama_url', ollamaUrl);
-      await SecureStore.setItemAsync('use_ollama', String(useOllama));
-      Alert.alert('Gespeichert', 'Einstellungen wurden gespeichert.');
+      await api.updateDiscogsToken(discogsToken);
+      const updated = await api.getDiscogsSettings();
+      setDiscogsToken('');
+      setDiscogsTokenSet(updated.discogs_token_set);
+      setDiscogsUsername(updated.discogs_username);
+      Alert.alert('Gespeichert', 'Discogs-Einstellungen wurden gespeichert.');
     } catch (e: any) {
       Alert.alert('Fehler', e.message);
     } finally {
-      setSaving(false);
+      setSavingDiscogs(false);
+    }
+  }
+
+  async function saveOllama() {
+    setSavingOllama(true);
+    try {
+      await api.updateOllamaUrl(ollamaUrl);
+      const updated = await api.getOllamaSettings();
+      setOllamaUrl(updated.ollama_url || updated.global_ollama_url || 'http://localhost:11434');
+      Alert.alert('Gespeichert', 'Ollama-URL wurde gespeichert.');
+    } catch (e: any) {
+      Alert.alert('Fehler', e.message);
+    } finally {
+      setSavingOllama(false);
     }
   }
 
@@ -56,14 +84,14 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: '#07111f' }}
-      contentContainerStyle={{ padding: 20 }}
+      contentContainerStyle={{ padding: 20, gap: 16 }}
     >
       <Text
         style={{
           fontSize: 20,
           fontWeight: 'bold',
           color: '#f5f7ff',
-          marginBottom: 20,
+          marginBottom: 4,
         }}
       >
         Einstellungen
@@ -71,95 +99,77 @@ export default function SettingsScreen() {
 
       {userInfo && (
         <View style={card}>
-          <Text style={label}>Konto</Text>
-          <Text style={{ color: '#f5f7ff', marginTop: 4 }}>{userInfo.email}</Text>
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              marginTop: 8,
-            }}
-          >
+          <View style={sectionHeader}>
+            <User size={18} color="#7c5cff" />
+            <Text style={label}>Konto</Text>
+          </View>
+          <Text style={{ color: '#f5f7ff', marginTop: 10, fontSize: 16, fontWeight: '600' }}>
+            {userInfo.email}
+          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
             <Text style={{ color: '#9eaccf' }}>Abo: {TIER_LABEL[userInfo.tier]}</Text>
             <Text style={{ color: '#9eaccf' }}>
-              Scans: {userInfo.scans_used} /{' '}
-              {userInfo.scans_limit === -1 ? '∞' : userInfo.scans_limit}
+              Scans: {userInfo.scans_used} / {userInfo.scans_limit === -1 ? '∞' : userInfo.scans_limit}
             </Text>
           </View>
         </View>
       )}
 
-      <View style={[card, { marginTop: 16 }]}>
-        <Text style={label}>Discogs Personal Token</Text>
+      <View style={card}>
+        <View style={sectionHeader}>
+          <Disc3 size={18} color="#00c2ff" />
+          <Text style={label}>Discogs</Text>
+        </View>
         <TextInput
           style={inputStyle}
-          placeholder="dein-discogs-token"
+          placeholder="Neuen Discogs-Token eingeben"
           placeholderTextColor="#9eaccf"
           value={discogsToken}
           onChangeText={setDiscogsToken}
           secureTextEntry
           autoCapitalize="none"
         />
-        <Text style={{ color: '#9eaccf', fontSize: 12, marginTop: 4 }}>
+        <Text style={{ color: '#9eaccf', fontSize: 12, marginTop: 6 }}>
           discogs.com/settings/developers
         </Text>
-      </View>
-
-      <View style={[card, { marginTop: 16 }]}>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Text style={label}>Ollama statt Anthropic nutzen</Text>
-          <Switch
-            value={useOllama}
-            onValueChange={setUseOllama}
-            trackColor={{ true: '#7c5cff' }}
-          />
+        <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={16} color={discogsTokenSet ? '#86f0c9' : '#9eaccf'} />
+          <Text style={{ color: discogsTokenSet ? '#86f0c9' : '#9eaccf', fontSize: 13 }}>
+            {discogsTokenSet
+              ? discogsUsername
+                ? `Verbunden als ${discogsUsername}`
+                : 'Token gespeichert'
+              : 'Kein Token hinterlegt'}
+          </Text>
         </View>
-        {useOllama && (
-          <TextInput
-            style={[inputStyle, { marginTop: 12 }]}
-            placeholder="http://192.168.x.x:11434"
-            placeholderTextColor="#9eaccf"
-            value={ollamaUrl}
-            onChangeText={setOllamaUrl}
-            autoCapitalize="none"
-          />
-        )}
+        <TouchableOpacity onPress={saveDiscogs} disabled={savingDiscogs} style={buttonPrimary}>
+          <Save size={16} color="#fff" />
+          <Text style={buttonPrimaryText}>{savingDiscogs ? 'Speichern…' : 'Discogs speichern'}</Text>
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        onPress={save}
-        disabled={saving}
-        style={{
-          marginTop: 24,
-          backgroundColor: '#7c5cff',
-          borderRadius: 14,
-          padding: 16,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-          {saving ? 'Speichern…' : 'Speichern'}
-        </Text>
-      </TouchableOpacity>
+      <View style={card}>
+        <View style={sectionHeader}>
+          <Server size={18} color="#7c5cff" />
+          <Text style={label}>Ollama</Text>
+        </View>
+        <TextInput
+          style={inputStyle}
+          placeholder="http://192.168.x.x:11434"
+          placeholderTextColor="#9eaccf"
+          value={ollamaUrl}
+          onChangeText={setOllamaUrl}
+          autoCapitalize="none"
+        />
+        <TouchableOpacity onPress={saveOllama} disabled={savingOllama} style={buttonPrimary}>
+          <Save size={16} color="#fff" />
+          <Text style={buttonPrimaryText}>{savingOllama ? 'Speichern…' : 'Ollama speichern'}</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity
-        onPress={handleLogout}
-        style={{
-          marginTop: 12,
-          borderRadius: 14,
-          padding: 16,
-          alignItems: 'center',
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.1)',
-        }}
-      >
-        <Text style={{ color: '#9eaccf', fontSize: 14 }}>Abmelden</Text>
+      <TouchableOpacity onPress={handleLogout} style={buttonSecondary}>
+        <LogOut size={16} color="#9eaccf" />
+        <Text style={{ color: '#9eaccf', fontSize: 14, fontWeight: '600' }}>Abmelden</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -171,6 +181,12 @@ const card = {
   padding: 16,
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.06)',
+};
+
+const sectionHeader = {
+  flexDirection: 'row' as const,
+  alignItems: 'center' as const,
+  gap: 8,
 };
 
 const label = {
@@ -187,7 +203,35 @@ const inputStyle = {
   padding: 12,
   color: '#f5f7ff',
   fontSize: 15,
-  marginTop: 8,
+  marginTop: 10,
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.08)',
+};
+
+const buttonPrimary = {
+  marginTop: 14,
+  backgroundColor: '#7c5cff',
+  borderRadius: 14,
+  padding: 14,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  flexDirection: 'row' as const,
+  gap: 8,
+};
+
+const buttonPrimaryText = {
+  color: '#fff',
+  fontWeight: 'bold' as const,
+  fontSize: 15,
+};
+
+const buttonSecondary = {
+  borderRadius: 14,
+  padding: 16,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  flexDirection: 'row' as const,
+  gap: 8,
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.1)',
 };

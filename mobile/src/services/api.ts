@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import type { AuthTokens, UserInfo, ScanResult, DiscogsRelease } from '../types';
+import type { AuthTokens, DiscogsRelease, ScanResult, UserInfo } from '../types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -76,10 +76,31 @@ export const api = {
       body: JSON.stringify({ artist, album }),
     }),
 
+  updateDiscogsToken: async (token: string): Promise<void> => {
+    await request('/auth/me/discogs', {
+      method: 'PUT',
+      body: JSON.stringify({ discogs_token: token }),
+    });
+  },
+
+  getDiscogsSettings: () =>
+    request<{ discogs_token_set: boolean; discogs_username: string | null }>('/auth/me/discogs'),
+
+  updateOllamaUrl: async (url: string): Promise<void> => {
+    await request('/auth/me/ollama', {
+      method: 'PUT',
+      body: JSON.stringify({ ollama_url: url }),
+    });
+  },
+
+  getOllamaSettings: () =>
+    request<{ ollama_url: string; global_ollama_url: string }>('/auth/me/ollama'),
+
   health: () =>
     request<{
-      discogs_connected: boolean;
       anthropic_key_set: boolean;
+      ollama_url: string;
       vision_backend: string;
+      vision_model: string;
     }>('/api/health'),
 };
