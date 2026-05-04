@@ -35,17 +35,29 @@ from PIL import Image
 _SYSTEM_PROMPT = (
     "You are an expert music archivist. "
     "Your task is to identify CD albums visible in a photo. "
-    "Look carefully at spine labels, cover art, and any visible text. "
+    "Look carefully at ALL visible text: spine labels, back cover, front cover, stickers, and barcodes. "
     "Return ONLY a valid JSON array – no markdown, no extra text. "
-    "Each element must have exactly two string keys: 'artist' and 'album'. "
+    "Each element must have exactly these string keys: "
+    "'artist', 'album', 'catalog_number', 'barcode', 'sticker_text', 'edition'. "
+    "Rules: "
+    "(1) 'catalog_number': the catalogue/catalog number printed on the BACK of the CD case or spine (e.g. '474 853 2', 'CDP 7 46681 2'). "
+    "Do NOT use matrix/runout numbers etched in the disc itself. Empty string if not visible. "
+    "(2) 'barcode': the numeric EAN/UPC barcode string on the BACK of the CD case (digits only, no spaces). Empty string if not visible. "
+    "(3) 'sticker_text': any text on a sticker on the FRONT cover (e.g. price sticker, promo sticker text). Empty string if none. This is for validation only. "
+    "(4) 'artist' and 'album': from spine, front cover, or back cover text. "
+    "(5) 'edition': any special edition indicator visible anywhere on the packaging "
+    "(e.g. 'Limited Edition', 'Remaster', 'Japan Pressing', 'Deluxe Edition', 'Promo', 'Gold CD'). "
+    "Empty string if this appears to be a standard release. "
     "If nothing is recognisable return an empty array []."
 )
 
 _USER_PROMPT = (
     "Please identify every CD visible in this image. "
-    "Extract the artist name and album title for each one. "
+    "For each CD extract: artist name, album title, catalog number from the back/spine, "
+    "barcode digits from the back, any sticker text on the front, and any edition indicator "
+    "(e.g. 'Limited Edition', 'Remaster', 'Japan Pressing', 'Deluxe Edition'). "
     "Return the result as a raw JSON array: "
-    '[{"artist": "...", "album": "..."}, ...]. '
+    '[{"artist": "...", "album": "...", "catalog_number": "...", "barcode": "...", "sticker_text": "...", "edition": "..."}, ...]. '
     "Output ONLY the JSON – no explanations."
 )
 
@@ -96,7 +108,7 @@ def _strip_code_fences(text: str) -> str:
 
 
 def _parse_albums(text: str) -> list[dict]:
-    """Parse a JSON array of {artist, album} dicts from raw text."""
+    """Parse a JSON array of CD identification dicts from raw text."""
     text = _strip_code_fences(text)
 
     try:
@@ -113,6 +125,10 @@ def _parse_albums(text: str) -> list[dict]:
         {
             "artist": str(item.get("artist", "")).strip(),
             "album": str(item.get("album", "")).strip(),
+            "catalog_number": str(item.get("catalog_number", "")).strip(),
+            "barcode": "".join(c for c in str(item.get("barcode", "")) if c.isdigit()),
+            "sticker_text": str(item.get("sticker_text", "")).strip(),
+            "edition": str(item.get("edition", "")).strip(),
         }
         for item in data
         if isinstance(item, dict)
@@ -250,7 +266,8 @@ def identify_cds_from_image(
     Returns
     -------
     list[dict]
-        List of ``{"artist": str, "album": str}`` dicts.
+        List of ``{"artist": str, "album": str, "catalog_number": str,
+        "barcode": str, "sticker_text": str}`` dicts.
     """
     if backend not in _BACKENDS:
         raise ValueError(f"backend must be one of {_BACKENDS}, got {backend!r}")

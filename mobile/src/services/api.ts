@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import type { AuthTokens, DiscogsRelease, ScanResult, UserInfo } from '../types';
+import type { AuthTokens, DiscogsRelease, MobileScanHistoryItem, ScanResult, UserInfo } from '../types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -53,6 +53,24 @@ export const api = {
 
   me: () => request<UserInfo>('/auth/me'),
 
+  updateProfile: (data: { display_name?: string; email?: string; password?: string }) =>
+    request<UserInfo>('/auth/me/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteAccount: async (): Promise<void> => {
+    const token = await getToken();
+    const res = await fetch(`${BASE_URL}/auth/me`, {
+      method: 'DELETE',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok && res.status !== 204) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? `HTTP ${res.status}`);
+    }
+  },
+
   scan: async (imageBase64: string, mimeType: string): Promise<ScanResult[]> => {
     const token = await getToken();
     const res = await fetch(`${BASE_URL}/api/scan`, {
@@ -96,6 +114,29 @@ export const api = {
   getOllamaSettings: () =>
     request<{ ollama_url: string; global_ollama_url: string }>('/auth/me/ollama'),
 
+  getScanHistory: (page = 1, perPage = 20) =>
+    request<{ total: number; page: number; per_page: number; items: MobileScanHistoryItem[] }>(
+      `/auth/me/scans?page=${page}&per_page=${perPage}`,
+    ),
+
+  updateScanHistoryItem: (id: number, data: { analysis_json?: string; discogs_results_json?: string }) =>
+    request<MobileScanHistoryItem>(`/auth/me/scans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteScanHistoryItem: async (id: number): Promise<void> => {
+    const token = await getToken();
+    const res = await fetch(`${BASE_URL}/auth/me/scans/${id}`, {
+      method: 'DELETE',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok && res.status !== 204) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? `HTTP ${res.status}`);
+    }
+  },
+
   health: () =>
     request<{
       anthropic_key_set: boolean;
@@ -103,4 +144,10 @@ export const api = {
       vision_backend: string;
       vision_model: string;
     }>('/api/health'),
+
+  discogsSearchSuggestions: (params: { artist?: string; album?: string; catno?: string; barcode?: string }) =>
+    request<{ results: Array<{ release_id: number; master_id: number | null; title: string; album: string; artist: string; year: number | null; cover_url: string; thumb_url: string; catno: string; label: string }>; confidence: string }>('/api/discogs/suggestions', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
 };

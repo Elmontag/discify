@@ -11,6 +11,8 @@ The caller is responsible for inserting sleep() delays between searches.
 
 from __future__ import annotations
 
+import re
+from difflib import SequenceMatcher
 from typing import Optional
 
 import requests
@@ -29,6 +31,69 @@ def _headers(token: str) -> dict[str, str]:
         "Authorization": f"Discogs token={token}",
         "User-Agent": _USER_AGENT,
         "Content-Type": "application/json",
+    }
+
+
+def _norm_catno(s: str) -> str:
+    """Strip all non-alphanumeric characters and uppercase for fuzzy catno matching."""
+    return re.sub(r'[^A-Za-z0-9]', '', s or '').upper()
+
+
+def _similarity(a: str, b: str) -> float:
+    """Return a 0–1 similarity ratio between two strings (case-insensitive)."""
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
+
+
+def _score_result(result: dict, catno: str = '', artist: str = '', album: str = '') -> float:
+    """
+    Compute a relevance score for a formatted Discogs result dict.
+
+    catno exact match  → +10
+    catno substring    → +5
+    artist similarity  → 0–3
+    album similarity   → 0–2
+    """
+    score = 0.0
+    result_catno = result.get('catno') or ''
+    if catno and result_catno:
+        nc, nr = _norm_catno(catno), _norm_catno(result_catno)
+        if nc and nr:
+            if nc == nr:
+                score += 10.0
+            elif nc in nr or nr in nc:
+                score += 5.0
+    if artist:
+        score += _similarity(artist, result.get('artist') or '') * 3.0
+    if album:
+        raw_title = result.get('title') or ''
+        parts = raw_title.split(' - ', 1)
+        album_part = parts[1].strip() if len(parts) == 2 else raw_title
+        score += _similarity(album, album_part) * 2.0
+    return score
+
+
+def _format_result(result: dict, artist_hint: str = "") -> dict:
+    """Normalise a raw Discogs search result into our standard dict shape."""
+    raw_title = result.get("title", "")
+    parts = raw_title.split(" - ", 1)
+    guessed_artist = parts[0].strip() if len(parts) == 2 else artist_hint
+    album_part = parts[1].strip() if len(parts) == 2 else raw_title
+    labels = result.get("label", [])
+    label_name = labels[0] if labels else ""
+    catno = result.get("catno", "")
+    return {
+        "release_id": result.get("id"),
+        "master_id": result.get("master_id"),
+        "title": raw_title,
+        "album": album_part,
+        "artist": artist_hint or guessed_artist,
+        "year": result.get("year"),
+        "cover_url": result.get("cover_image", ""),
+        "thumb_url": result.get("thumb", ""),
+        "catno": catno,
+        "label": label_name,
     }
 
 
@@ -55,59 +120,175 @@ def get_username(token: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-def search_release(artist: str, album: str, token: str = '') -> Optional[dict]:
-    """
-    Search Discogs for the best matching release.
+# ---------------------------------------------------------------------------
+# Ranked search helpers (return list[dict] sorted by relevance score)
+# ---------------------------------------------------------------------------
 
-    Returns a dict with keys:
-        release_id, master_id, title, artist, year, cover_url, thumb_url
-    or None if nothing was found / an error occurred.
-    """
-    if not token:
-        return None
+
+def search_all_by_catno(catno: str, token: str = '', per_page: int = 10, artist_hint: str = '') -> list[dict]:
+    """Search by catalog number; return scored results sorted by relevance."""
+    if not token or not catno:
+        return []
     try:
-        query = " ".join(part for part in [artist, album] if part).strip()
-        if not query:
-            return None
+        r = requests.get(
+            f"{_BASE_URL}/database/search",
+            headers=_headers(token),
+            params={"catno": catno, "type": "release", "per_page": per_page, "page": 1},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return []
+        out = []
+        for res in r.json().get("results", []):
+            fmt = _format_result(res, artist_hint=artist_hint)
+            fmt['_score'] = _score_result(fmt, catno=catno)
+            out.append(fmt)
+        out.sort(key=lambda x: x['_score'], reverse=True)
+        return out
+    except Exception:
+        return []
 
-        params: dict = {
-            "q": query,
-            "type": "release",
-            "per_page": 5,
-            "page": 1,
-        }
+
+def search_all_by_barcode(barcode: str, token: str = '', per_page: int = 5, artist_hint: str = '') -> list[dict]:
+    """Search by barcode; barcodes are highly specific so results get a high base score."""
+    if not token or not barcode:
+        return []
+    try:
+        r = requests.get(
+            f"{_BASE_URL}/database/search",
+            headers=_headers(token),
+            params={"barcode": barcode, "type": "release", "per_page": per_page, "page": 1},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return []
+        out = []
+        for i, res in enumerate(r.json().get("results", [])):
+            fmt = _format_result(res, artist_hint=artist_hint)
+            fmt['_score'] = 8.0 - i * 0.1
+            out.append(fmt)
+        return out
+    except Exception:
+        return []
+
+
+def search_all_by_text(artist: str, album: str, token: str = '', per_page: int = 8) -> list[dict]:
+    """Search by artist + album text; return scored and sorted results."""
+    if not token:
+        return []
+    query = " ".join(p for p in [artist, album] if p).strip()
+    if not query:
+        return []
+    try:
+        params: dict = {"q": query, "type": "release", "per_page": per_page, "page": 1}
         if artist:
             params["artist"] = artist
         if album:
             params["release_title"] = album
-
         r = requests.get(
             f"{_BASE_URL}/database/search",
             headers=_headers(token),
             params=params,
             timeout=15,
         )
-
         if r.status_code != 200:
-            return None
-
-        results = r.json().get("results", [])
-        if not results:
-            return None
-
-        best = results[0]
-        return {
-            "release_id": best.get("id"),
-            "master_id": best.get("master_id"),
-            "title": best.get("title", ""),
-            "artist": artist or best.get("title", "").split(" - ")[0],
-            "year": best.get("year"),
-            "cover_url": best.get("cover_image", ""),
-            "thumb_url": best.get("thumb", ""),
-        }
-
+            return []
+        out = []
+        for res in r.json().get("results", []):
+            fmt = _format_result(res, artist_hint=artist)
+            fmt['_score'] = _score_result(fmt, artist=artist, album=album)
+            out.append(fmt)
+        out.sort(key=lambda x: x['_score'], reverse=True)
+        return out
     except Exception:
+        return []
+
+
+def search_candidates(
+    catno: str = '',
+    barcode: str = '',
+    artist: str = '',
+    album: str = '',
+    token: str = '',
+) -> tuple[Optional[dict], list[dict], str]:
+    """
+    Run the full priority search chain and return (best, alternatives, confidence).
+
+    Priority: catno > barcode > artist+album text.
+    Candidates are deduplicated by release_id, then sorted by score.
+
+    Returns:
+        best        – highest-scoring result (no _score field), or None
+        alternatives – up to 6 next-best results
+        confidence   – 'high' (exact catno match) | 'medium' | 'low'
+    """
+    bucket: list[tuple[dict, float]] = []
+    seen_ids: set = set()
+
+    def _add(hits: list[dict]) -> None:
+        for c in hits:
+            score = c.pop('_score', 0.0)
+            rid = c.get('release_id')
+            key = rid if rid is not None else id(c)
+            if key not in seen_ids:
+                seen_ids.add(key)
+                bucket.append((c, score))
+
+    if catno:
+        _add(search_all_by_catno(catno, token=token, artist_hint=artist))
+    if barcode:
+        _add(search_all_by_barcode(barcode, token=token, artist_hint=artist))
+    if artist or album:
+        _add(search_all_by_text(artist, album, token=token))
+
+    # Album-only fallback: if text search found nothing useful, try album title alone
+    if album and (not bucket or max(s for _, s in bucket) < 1.0):
+        _add(search_all_by_text('', album, token=token, per_page=5))
+
+    if not bucket:
+        return None, [], 'low'
+
+    bucket.sort(key=lambda x: x[1], reverse=True)
+    best, best_score = bucket[0]
+    alternatives = [c for c, _ in bucket[1:7]]
+
+    if catno and best.get('catno') and _norm_catno(best['catno']) == _norm_catno(catno):
+        confidence = 'high'
+    elif best_score >= 5.0:
+        confidence = 'medium'
+    else:
+        confidence = 'low'
+
+    return best, alternatives, confidence
+
+
+# ---------------------------------------------------------------------------
+# Legacy single-result wrappers (used by /api/discogs/search endpoints)
+# ---------------------------------------------------------------------------
+
+
+def search_release(artist: str, album: str, token: str = '') -> Optional[dict]:
+    """Search by artist + album; returns best single result or None."""
+    hits = search_all_by_text(artist, album, token=token, per_page=5)
+    if not hits:
         return None
+    return {k: v for k, v in hits[0].items() if k != '_score'}
+
+
+def search_by_catno(catno: str, token: str = '') -> Optional[dict]:
+    """Search by catalog number; returns best single result or None."""
+    hits = search_all_by_catno(catno, token=token, per_page=3)
+    if not hits:
+        return None
+    return {k: v for k, v in hits[0].items() if k != '_score'}
+
+
+def search_by_barcode(barcode: str, token: str = '') -> Optional[dict]:
+    """Search by barcode; returns best single result or None."""
+    hits = search_all_by_barcode(barcode, token=token, per_page=3)
+    if not hits:
+        return None
+    return {k: v for k, v in hits[0].items() if k != '_score'}
 
 
 def manual_search(query: str, token: str = '') -> Optional[dict]:
@@ -133,20 +314,12 @@ def manual_search(query: str, token: str = '') -> Optional[dict]:
         if not results:
             return None
         best = results[0]
-        raw_title = best.get("title", "")
+        hit = _format_result(best)
+        raw_title = hit["title"]
         parts = raw_title.split(" - ", 1)
-        guessed_artist = parts[0].strip() if len(parts) == 2 else ""
-        guessed_album = parts[1].strip() if len(parts) == 2 else raw_title
-        return {
-            "release_id": best.get("id"),
-            "master_id": best.get("master_id"),
-            "title": raw_title,
-            "artist": guessed_artist,
-            "album": guessed_album,
-            "year": best.get("year"),
-            "cover_url": best.get("cover_image", ""),
-            "thumb_url": best.get("thumb", ""),
-        }
+        hit["artist"] = parts[0].strip() if len(parts) == 2 else ""
+        hit["album"] = parts[1].strip() if len(parts) == 2 else raw_title
+        return hit
     except Exception:
         return None
 

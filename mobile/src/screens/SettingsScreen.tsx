@@ -10,29 +10,22 @@ import {
 import {
   CheckCircle2,
   Disc3,
-  LogOut,
   Save,
   Server,
-  User,
 } from 'lucide-react-native';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import type { UserInfo } from '../types';
 
 export default function SettingsScreen() {
-  const { logout } = useAuth();
   const [discogsToken, setDiscogsToken] = useState('');
   const [discogsTokenSet, setDiscogsTokenSet] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState<string | null>(null);
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [savingDiscogs, setSavingDiscogs] = useState(false);
   const [savingOllama, setSavingOllama] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.me(), api.getDiscogsSettings(), api.getOllamaSettings()])
-      .then(([me, discogs, ollama]) => {
-        setUserInfo(me);
+    Promise.all([api.getDiscogsSettings(), api.getOllamaSettings()])
+      .then(([discogs, ollama]) => {
         setDiscogsTokenSet(discogs.discogs_token_set);
         setDiscogsUsername(discogs.discogs_username);
         setOllamaUrl(ollama.ollama_url || ollama.global_ollama_url || 'http://localhost:11434');
@@ -70,55 +63,20 @@ export default function SettingsScreen() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    Alert.alert('Abgemeldet', 'Du wurdest abgemeldet.');
-  }
-
-  const TIER_LABEL: Record<string, string> = {
-    free: 'Free',
-    basic: 'Basic',
-    pro: 'Pro',
-  };
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: '#07111f' }}
-      contentContainerStyle={{ padding: 20, gap: 16 }}
+      contentContainerStyle={{ paddingTop: 56, paddingHorizontal: 20, paddingBottom: 40, gap: 16 }}
     >
-      <Text
-        style={{
-          fontSize: 20,
-          fontWeight: 'bold',
-          color: '#f5f7ff',
-          marginBottom: 4,
-        }}
-      >
+      <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#f5f7ff', marginBottom: 4 }}>
         Einstellungen
       </Text>
 
-      {userInfo && (
-        <View style={card}>
-          <View style={sectionHeader}>
-            <User size={18} color="#7c5cff" />
-            <Text style={label}>Konto</Text>
-          </View>
-          <Text style={{ color: '#f5f7ff', marginTop: 10, fontSize: 16, fontWeight: '600' }}>
-            {userInfo.email}
-          </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-            <Text style={{ color: '#9eaccf' }}>Abo: {TIER_LABEL[userInfo.tier]}</Text>
-            <Text style={{ color: '#9eaccf' }}>
-              Scans: {userInfo.scans_used} / {userInfo.scans_limit === -1 ? '∞' : userInfo.scans_limit}
-            </Text>
-          </View>
-        </View>
-      )}
-
+      {/* Discogs */}
       <View style={card}>
         <View style={sectionHeader}>
           <Disc3 size={18} color="#00c2ff" />
-          <Text style={label}>Discogs</Text>
+          <Text style={labelStyle}>Discogs</Text>
         </View>
         <TextInput
           style={inputStyle}
@@ -136,9 +94,7 @@ export default function SettingsScreen() {
           <CheckCircle2 size={16} color={discogsTokenSet ? '#86f0c9' : '#9eaccf'} />
           <Text style={{ color: discogsTokenSet ? '#86f0c9' : '#9eaccf', fontSize: 13 }}>
             {discogsTokenSet
-              ? discogsUsername
-                ? `Verbunden als ${discogsUsername}`
-                : 'Token gespeichert'
+              ? discogsUsername ? `Verbunden als ${discogsUsername}` : 'Token gespeichert'
               : 'Kein Token hinterlegt'}
           </Text>
         </View>
@@ -148,11 +104,15 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Ollama */}
       <View style={card}>
         <View style={sectionHeader}>
           <Server size={18} color="#7c5cff" />
-          <Text style={label}>Ollama</Text>
+          <Text style={labelStyle}>Ollama (selbst gehostet)</Text>
         </View>
+        <Text style={{ color: '#9eaccf', fontSize: 12, marginTop: 6, marginBottom: 4 }}>
+          Lokale Ollama-Instanz als Vision-Backend nutzen
+        </Text>
         <TextInput
           style={inputStyle}
           placeholder="http://192.168.x.x:11434"
@@ -166,11 +126,6 @@ export default function SettingsScreen() {
           <Text style={buttonPrimaryText}>{savingOllama ? 'Speichern…' : 'Ollama speichern'}</Text>
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity onPress={handleLogout} style={buttonSecondary}>
-        <LogOut size={16} color="#9eaccf" />
-        <Text style={{ color: '#9eaccf', fontSize: 14, fontWeight: '600' }}>Abmelden</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -189,7 +144,7 @@ const sectionHeader = {
   gap: 8,
 };
 
-const label = {
+const labelStyle = {
   color: '#9eaccf',
   fontSize: 12,
   fontWeight: '600' as const,
@@ -235,3 +190,4 @@ const buttonSecondary = {
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.1)',
 };
+

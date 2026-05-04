@@ -6,14 +6,44 @@ export interface Album {
   year: number | null;
   cover_url: string | null;
   thumb_url: string | null;
+  catno: string;
+  label: string;
+  barcode: string;
   added_at: string;
-  source: 'scan' | 'discogs_sync';
+  source: 'scan' | 'discogs_sync' | 'manual' | 'barcode';
+}
+
+export interface AlternativeHit {
+  release_id: number | null;
+  master_id: number | null;
+  title: string;
+  album: string;
+  artist: string;
+  year: number | null;
+  cover_url: string;
+  thumb_url: string;
+  catno: string;
+  label: string;
 }
 
 export interface ScanResult {
-  artist: string;
+  ai_artist: string;
+  ai_album: string;
+  ai_catalog_number: string;
+  ai_barcode: string;
+  ai_edition?: string;
+  found: boolean;
+  confidence?: 'high' | 'medium' | 'low';
+  release_id: number | null;
+  title: string;
   album: string;
-  confidence: 'high' | 'medium' | 'low';
+  artist: string;
+  year: number | null;
+  cover_url: string | null;
+  thumb_url: string | null;
+  catno: string;
+  label: string;
+  alternatives?: AlternativeHit[];
 }
 
 export interface DiscogsRelease {
@@ -24,6 +54,7 @@ export interface DiscogsRelease {
   cover_url: string | null;
   thumb_url: string | null;
   label: string | null;
+  catno: string | null;
   format: string | null;
 }
 
@@ -38,6 +69,15 @@ export interface UserInfo {
   discogs_token_set?: boolean;
   ollama_url?: string;
   created_at?: string | null;
+}
+
+export interface MobileScanHistoryItem {
+  id: number;
+  created_at: string;
+  has_image: boolean;
+  analysis_json: string;
+  discogs_results_json: string;
+  status: string;
 }
 
 export interface AuthTokens {

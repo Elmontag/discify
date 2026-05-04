@@ -2,9 +2,11 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Library, Settings as SettingsIcon } from 'lucide-react-native';
+import { Clock, Library, Settings as SettingsIcon, User } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import AccountScreen from '../screens/AccountScreen';
 import CollectionScreen from '../screens/CollectionScreen';
+import ScanHistoryScreen from '../screens/ScanHistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ScanScreen from '../screens/ScanScreen';
 import AuthScreen from '../screens/AuthScreen';
@@ -17,6 +19,8 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Collection: undefined;
+  ScanHistory: undefined;
+  Account: undefined;
   Settings: undefined;
 };
 
@@ -28,12 +32,10 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
-          if (route.name === 'Collection') {
-            return <Library size={size} color={color} />;
-          }
-          if (route.name === 'Settings') {
-            return <SettingsIcon size={size} color={color} />;
-          }
+          if (route.name === 'Collection') return <Library size={size} color={color} />;
+          if (route.name === 'ScanHistory') return <Clock size={size} color={color} />;
+          if (route.name === 'Account') return <User size={size} color={color} />;
+          if (route.name === 'Settings') return <SettingsIcon size={size} color={color} />;
           return null;
         },
         tabBarStyle: { backgroundColor: '#07111f', borderTopColor: '#1a2a3f' },
@@ -42,16 +44,10 @@ function MainTabs() {
         headerShown: false,
       })}
     >
-      <Tab.Screen
-        name="Collection"
-        component={CollectionScreen}
-        options={{ title: 'Sammlung' }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ title: 'Einstellungen' }}
-      />
+      <Tab.Screen name="Collection" component={CollectionScreen} options={{ title: 'Sammlung' }} />
+      <Tab.Screen name="ScanHistory" component={ScanHistoryScreen} options={{ title: 'Verlauf' }} />
+      <Tab.Screen name="Account" component={AccountScreen} options={{ title: 'Konto' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Einstellungen' }} />
     </Tab.Navigator>
   );
 }

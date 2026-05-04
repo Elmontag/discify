@@ -1,22 +1,102 @@
+import { useState } from 'react'
+import { Disc3, Pencil, X, Save } from 'lucide-react'
 import type { Release } from '../api/types'
-import { Disc3 } from 'lucide-react'
 
 interface Props {
   release: Release
+  onUpdate?: (updated: Partial<Release>) => void
 }
 
-export default function AlbumCard({ release }: Props) {
+export default function AlbumCard({ release, onUpdate }: Props) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(release.title)
+  const [artist, setArtist] = useState(release.artist)
+  const [catno, setCatno] = useState(release.catno ?? '')
+  const [year, setYear] = useState(release.year ? String(release.year) : '')
+
   const thumb = release.thumb_url || release.cover_url
   const discogsUrl = `https://www.discogs.com/release/${release.release_id}`
 
+  function saveEdit(e: React.MouseEvent) {
+    e.preventDefault()
+    onUpdate?.({ title, artist, catno, year: year ? Number(year) : null })
+    setEditing(false)
+  }
+
+  function cancelEdit(e: React.MouseEvent) {
+    e.preventDefault()
+    setTitle(release.title)
+    setArtist(release.artist)
+    setCatno(release.catno ?? '')
+    setYear(release.year ? String(release.year) : '')
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-[#7c5cff]/40 bg-white/5">
+        <div className="aspect-square w-full overflow-hidden bg-white/5">
+          {thumb ? (
+            <img src={thumb} alt="" className="h-full w-full object-cover opacity-60" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[#9eaccf]">
+              <Disc3 size={40} strokeWidth={1.2} />
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5 p-3">
+          <input
+            className="w-full rounded-lg bg-white/8 px-2 py-1 text-xs text-[#f5f7ff] outline-none focus:ring-1 focus:ring-[#7c5cff]"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Albumtitel"
+          />
+          <input
+            className="w-full rounded-lg bg-white/8 px-2 py-1 text-xs text-[#f5f7ff] outline-none focus:ring-1 focus:ring-[#7c5cff]"
+            value={artist}
+            onChange={(e) => setArtist(e.target.value)}
+            placeholder="Interpret"
+          />
+          <input
+            className="w-full rounded-lg bg-white/8 px-2 py-1 text-xs text-[#f5f7ff] outline-none focus:ring-1 focus:ring-[#7c5cff]"
+            value={catno}
+            onChange={(e) => setCatno(e.target.value)}
+            placeholder="Katalognr."
+          />
+          <input
+            className="w-full rounded-lg bg-white/8 px-2 py-1 text-xs text-[#f5f7ff] outline-none focus:ring-1 focus:ring-[#7c5cff]"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="Jahr"
+            type="number"
+          />
+          <div className="flex gap-1.5 pt-1">
+            <button
+              onClick={saveEdit}
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#7c5cff] py-1.5 text-xs font-bold text-white"
+            >
+              <Save size={11} /> Speichern
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-white/10 py-1.5 text-xs text-[#9eaccf]"
+            >
+              <X size={11} /> Abbrechen
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <a
-      href={discogsUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/3 transition-all hover:border-white/20 hover:bg-white/6 active:scale-95"
-    >
-      <div className="aspect-square w-full overflow-hidden bg-white/5">
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/3 transition-all hover:border-white/20 hover:bg-white/6">
+      <a
+        href={discogsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="aspect-square w-full overflow-hidden bg-white/5 block"
+      >
         {thumb ? (
           <img
             src={thumb}
@@ -29,14 +109,28 @@ export default function AlbumCard({ release }: Props) {
             <Disc3 size={40} strokeWidth={1.2} />
           </div>
         )}
-      </div>
+      </a>
+      {onUpdate && (
+        <button
+          onClick={(e) => { e.preventDefault(); setEditing(true) }}
+          className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 p-1.5 text-[#9eaccf] hover:text-[#7c5cff] backdrop-blur-sm"
+          aria-label="Bearbeiten"
+        >
+          <Pencil size={13} />
+        </button>
+      )}
       <div className="p-3">
         <p className="truncate text-sm font-bold text-[#f5f7ff]">{release.title}</p>
         <p className="truncate text-xs text-[#9eaccf]">{release.artist}</p>
-        {release.year && (
-          <p className="mt-1 text-xs text-[#9eaccf]/70">{release.year}</p>
+        {(release.catno || release.year) && (
+          <p className="mt-1 truncate text-xs text-[#9eaccf]/70">
+            {[release.catno, release.year].filter(Boolean).join(' · ')}
+          </p>
+        )}
+        {release.label && (
+          <p className="truncate text-xs text-[#9eaccf]/50">{release.label}</p>
         )}
       </div>
-    </a>
+    </div>
   )
 }

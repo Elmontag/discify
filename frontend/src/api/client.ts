@@ -6,6 +6,7 @@ import type {
   Models,
   ScanHistoryItem,
   ScanResponse,
+  ScanResult,
   Settings,
   UserMe,
 } from './types'
@@ -119,13 +120,13 @@ export const api = {
     ),
 
   // Settings
-  getSettings: () => request<Settings>('/settings'),
+  getSettings: () => authRequest<Settings>('/api/settings'),
   updateSettings: (data: Partial<Settings>) =>
     authRequest<Settings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  getModels: () => request<Models>('/settings/models'),
+  getModels: () => authRequest<Models>('/api/settings/models'),
 
   // Health
   getHealth: () => request<HealthStatus>('/health'),
@@ -137,7 +138,17 @@ export const api = {
   // Scan
   scanImage: async (file: File) => {
     const imageBase64 = await fileToBase64(file)
-    const results = await authRequest<Array<{ artist: string; album: string; confidence: string }>>(
+    const results = await authRequest<Array<{
+      ai_artist: string; ai_album: string; ai_catalog_number: string; ai_barcode: string; ai_edition?: string;
+      found: boolean; confidence?: string; release_id: number | null; master_id: number | null;
+      title: string; album: string; artist: string; year: number | null;
+      cover_url: string; thumb_url: string; catno: string; label: string;
+      alternatives?: Array<{
+        release_id: number | null; master_id: number | null;
+        title: string; album: string; artist: string; year: number | null;
+        cover_url: string; thumb_url: string; catno: string; label: string;
+      }>;
+    }>>(
       '/api/scan',
       {
         method: 'POST',
@@ -148,49 +159,41 @@ export const api = {
       },
     )
 
-    const albums = await Promise.all(
-      results.map(async (item, idx) => {
-        try {
-          const hit = await authRequest<DiscogsHit>('/api/discogs/search', {
-            method: 'POST',
-            body: JSON.stringify({ artist: item.artist, album: item.album }),
-          })
-          return {
-            idx,
-            recognized_artist: item.artist,
-            recognized_album: item.album,
-            found: true,
-            discogs_title: hit.title,
-            discogs_artist: hit.artist,
-            release_id: hit.release_id,
-            master_id: hit.master_id,
-            year: hit.year ? String(hit.year) : '',
-            cover_url: hit.cover_url ?? '',
-            thumb_url: hit.thumb_url ?? '',
-            in_collection: false,
-            status: 'new' as const,
-            include: true,
-          }
-        } catch {
-          return {
-            idx,
-            recognized_artist: item.artist,
-            recognized_album: item.album,
-            found: false,
-            discogs_title: '',
-            discogs_artist: '',
-            release_id: null,
-            master_id: null,
-            year: '',
-            cover_url: '',
-            thumb_url: '',
-            in_collection: false,
-            status: 'not_found' as const,
-            include: false,
-          }
-        }
-      }),
-    )
+    const albums: ScanResult[] = results.map((item, idx) => ({
+      idx,
+      ai_artist: item.ai_artist,
+      ai_album: item.ai_album,
+      ai_catalog_number: item.ai_catalog_number,
+      ai_barcode: item.ai_barcode,
+      ai_edition: item.ai_edition ?? '',
+      found: item.found,
+      confidence: (item.confidence as ScanResult['confidence']) ?? 'low',
+      title: item.title,
+      album: item.album ?? '',
+      artist: item.artist,
+      year: item.year ? String(item.year) : '',
+      cover_url: item.cover_url ?? '',
+      thumb_url: item.thumb_url ?? '',
+      catno: item.catno ?? '',
+      label: item.label ?? '',
+      release_id: item.release_id,
+      master_id: item.master_id,
+      in_collection: false,
+      status: item.found ? ('new' as const) : ('not_found' as const),
+      include: item.found,
+      alternatives: (item.alternatives ?? []).map((a) => ({
+        release_id: a.release_id,
+        master_id: a.master_id,
+        title: a.title,
+        album: a.album ?? '',
+        artist: a.artist,
+        year: a.year,
+        cover_url: a.cover_url ?? '',
+        thumb_url: a.thumb_url ?? '',
+        catno: a.catno ?? '',
+        label: a.label ?? '',
+      })),
+    }))
 
     return { albums, username: null } satisfies ScanResponse
   },
@@ -206,11 +209,38 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ query }),
     }),
+  discogsSearchSuggestions: (params: {
+    artist?: string
+    album?: string
+    catno?: string
+    barcode?: string
+  }) =>
+    authRequest<import('./types').DiscogsSearchSuggestionsResult>('/api/discogs/suggestions', {
+      method: 'POST',
+      body: JSON.stringify({
+        artist: params.artist ?? '',
+        album: params.album ?? '',
+        catno: params.catno ?? '',
+        barcode: params.barcode ?? '',
+      }),
+    }),
   discogsAdd: (releaseId: number) =>
     authRequest<{ success: boolean; release_id: number }>('/api/discogs/add', {
       method: 'POST',
       body: JSON.stringify({ release_id: releaseId }),
     }),
+
+  // Scan history
+  updateScanHistoryItem: (id: number, data: { analysis_json?: string; discogs_results_json?: string }) =>
+    authRequest<ScanHistoryItem>(`/auth/me/scans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteScanHistoryItem: (id: number) =>
+    authRequest<void>(`/auth/me/scans/${id}`, { method: 'DELETE' }),
+
+  // Account deletion
+  deleteAccount: () => authRequest<void>('/auth/me', { method: 'DELETE' }),
 
   adminListUsers: () => authRequest<AdminUser[]>('/admin/users'),
   adminUpdateUser: (

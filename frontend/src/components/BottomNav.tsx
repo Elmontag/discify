@@ -1,4 +1,4 @@
-import { Disc3, Settings, User, Users, type LucideIcon } from 'lucide-react'
+import { Clock, Disc3, User, Users, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -10,8 +10,8 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { to: '/', label: 'Sammlung', Icon: Disc3 },
+  { to: '/history', label: 'Verlauf', Icon: Clock },
   { to: '/account', label: 'Konto', Icon: User },
-  { to: '/settings', label: 'Einstellungen', Icon: Settings },
 ]
 
 export default function BottomNav() {
@@ -21,7 +21,7 @@ export default function BottomNav() {
     : baseNavItems
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#07111f]/95 backdrop-blur-lg safe-area-inset-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#07111f]/95 backdrop-blur-lg safe-area-inset-bottom md:hidden">
       <div className="flex">
         {navItems.map(({ to, label, Icon }) => (
           <NavLink

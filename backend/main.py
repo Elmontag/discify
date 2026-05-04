@@ -39,7 +39,7 @@ from pwdlib import PasswordHash
 sys.path.insert(0, str(Path(__file__).parent))
 
 import settings as settings_module
-from discogs_helper import add_release_to_collection, get_username, manual_search, search_release
+from discogs_helper import add_release_to_collection, get_username, manual_search, search_release, search_by_catno, search_by_barcode, search_candidates
 from vision import ANTHROPIC_MODELS, OLLAMA_MODELS, identify_cds_from_image
 
 # ---------------------------------------------------------------------------
@@ -120,6 +120,11 @@ class ScanHistoryItem(BaseModel):
     status: str
 
 
+class ScanHistoryUpdate(BaseModel):
+    analysis_json: Optional[str] = None
+    discogs_results_json: Optional[str] = None
+
+
 class UserMe(BaseModel):
     id: int
     email: str
@@ -154,6 +159,13 @@ class DiscogsSearchRequest(BaseModel):
 
 class ManualSearchRequest(BaseModel):
     query: str
+
+
+class SuggestionsRequest(BaseModel):
+    artist: str = ''
+    album: str = ''
+    catno: str = ''
+    barcode: str = ''
 
 
 class AddToCollectionRequest(BaseModel):
@@ -526,9 +538,64 @@ def get_scan_history(
     }
 
 
-# ---------------------------------------------------------------------------
-# Admin endpoints
-# ---------------------------------------------------------------------------
+@app.put('/auth/me/scans/{scan_id}')
+def update_scan_history_item(
+    scan_id: int,
+    body: ScanHistoryUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    with get_db() as cur:
+        cur.execute('SELECT id FROM scan_history WHERE id = %s AND user_id = %s', (scan_id, current_user['id']))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail='Scan nicht gefunden.')
+        updates = {}
+        if body.analysis_json is not None:
+            updates['analysis_json'] = body.analysis_json
+        if body.discogs_results_json is not None:
+            updates['discogs_results_json'] = body.discogs_results_json
+        if updates:
+            set_clause = ', '.join(f'{k} = %s' for k in updates)
+            cur.execute(
+                f'UPDATE scan_history SET {set_clause} WHERE id = %s AND user_id = %s',
+                (*updates.values(), scan_id, current_user['id']),
+            )
+        cur.execute(
+            '''SELECT id, created_at, image_path, analysis_json, discogs_results_json, status
+               FROM scan_history WHERE id = %s''',
+            (scan_id,),
+        )
+        row = cur.fetchone()
+    return {
+        'id': row['id'],
+        'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+        'has_image': row['image_path'] is not None,
+        'analysis_json': row['analysis_json'],
+        'discogs_results_json': row['discogs_results_json'],
+        'status': row['status'],
+    }
+
+
+@app.delete('/auth/me/scans/{scan_id}', status_code=204)
+def delete_scan_history_item(scan_id: int, current_user: dict = Depends(get_current_user)):
+    with get_db() as cur:
+        cur.execute('SELECT image_path FROM scan_history WHERE id = %s AND user_id = %s', (scan_id, current_user['id']))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail='Scan nicht gefunden.')
+        if row['image_path']:
+            Path(row['image_path']).unlink(missing_ok=True)
+        cur.execute('DELETE FROM scan_history WHERE id = %s AND user_id = %s', (scan_id, current_user['id']))
+
+
+@app.delete('/auth/me', status_code=204)
+def delete_own_account(current_user: dict = Depends(get_current_user)):
+    """Delete the currently authenticated user's account and all their data."""
+    with get_db() as cur:
+        # Delete scan images from disk before removing DB records
+        cur.execute('SELECT image_path FROM scan_history WHERE user_id = %s AND image_path IS NOT NULL', (current_user['id'],))
+        for row in cur.fetchall():
+            Path(row['image_path']).unlink(missing_ok=True)
+        cur.execute('DELETE FROM users WHERE id = %s', (current_user['id'],))
 
 
 @app.get('/admin/users', response_model=list[AdminUserItem])
@@ -589,7 +656,7 @@ def admin_delete_user(user_id: int, admin: dict = Depends(require_admin)):
 
 
 @app.get('/api/settings')
-def get_settings():
+def get_settings(admin: dict = Depends(require_admin)):
     return settings_module.get_safe()
 
 
@@ -601,7 +668,7 @@ def update_settings(body: SettingsUpdate, admin: dict = Depends(require_admin)):
 
 
 @app.get('/api/settings/models')
-def get_models():
+def get_models(admin: dict = Depends(require_admin)):
     return {'anthropic': ANTHROPIC_MODELS, 'ollama': OLLAMA_MODELS}
 
 
@@ -719,20 +786,71 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
         image_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    results = [
-        {'artist': str(item.get('artist', '')).strip(), 'album': str(item.get('album', '')).strip(), 'confidence': 'medium'}
-        for item in identified
-        if item.get('artist') or item.get('album')
-    ]
+    token = current_user.get('discogs_token', '')
+
+    analysis_results = []
+    discogs_results = []
+
+    for item in identified:
+        artist = str(item.get('artist', '')).strip()
+        album = str(item.get('album', '')).strip()
+        catalog_number = str(item.get('catalog_number', '')).strip()
+        barcode = str(item.get('barcode', '')).strip()
+        sticker_text = str(item.get('sticker_text', '')).strip()
+        edition = str(item.get('edition', '')).strip()
+
+        if not artist and not album and not catalog_number and not barcode:
+            continue
+
+        analysis_results.append({
+            'artist': artist,
+            'album': album,
+            'catalog_number': catalog_number,
+            'barcode': barcode,
+            'sticker_text': sticker_text,
+            'edition': edition,
+            'confidence': 'medium',
+        })
+
+        # Priority chain: catno → barcode → artist+album text (all merged + ranked)
+        best, alternatives, confidence = search_candidates(
+            catno=catalog_number,
+            barcode=barcode,
+            artist=artist,
+            album=album,
+            token=token,
+        )
+
+        discogs_results.append({
+            'ai_artist': artist,
+            'ai_album': album,
+            'ai_catalog_number': catalog_number,
+            'ai_barcode': barcode,
+            'ai_edition': edition,
+            'found': best is not None,
+            'confidence': confidence,
+            'release_id': best.get('release_id') if best else None,
+            'master_id': best.get('master_id') if best else None,
+            'title': best.get('title', '') if best else '',
+            'album': best.get('album', '') if best else album,
+            'artist': best.get('artist', '') if best else artist,
+            'year': best.get('year') if best else None,
+            'cover_url': best.get('cover_url', '') if best else '',
+            'thumb_url': best.get('thumb_url', '') if best else '',
+            'catno': best.get('catno', '') if best else catalog_number,
+            'label': best.get('label', '') if best else '',
+            'alternatives': alternatives,
+        })
 
     with get_db() as cur:
         cur.execute(
-            '''INSERT INTO scan_history (user_id, image_path, image_expires_at, analysis_json, status)
-               VALUES (%s, %s, %s, %s, 'complete')''',
-            (current_user['id'], str(image_path), expires_at, json.dumps(results)),
+            '''INSERT INTO scan_history (user_id, image_path, image_expires_at, analysis_json, discogs_results_json, status)
+               VALUES (%s, %s, %s, %s, %s, 'complete')''',
+            (current_user['id'], str(image_path), expires_at,
+             json.dumps(analysis_results), json.dumps(discogs_results)),
         )
     increment_scan_usage(current_user['id'])
-    return results
+    return discogs_results
 
 
 # ---------------------------------------------------------------------------
@@ -748,13 +866,14 @@ def discogs_search(body: DiscogsSearchRequest, current_user: dict = Depends(get_
         raise HTTPException(status_code=404, detail='Kein Treffer gefunden.')
     return {
         'id': hit.get('release_id'),
+        'release_id': hit.get('release_id'),
         'title': hit.get('title', ''),
         'artist': hit.get('artist', ''),
         'year': hit.get('year'),
         'cover_url': hit.get('cover_url') or None,
         'thumb_url': hit.get('thumb_url') or None,
-        'label': None,
-        'format': None,
+        'catno': hit.get('catno', ''),
+        'label': hit.get('label', ''),
     }
 
 
@@ -765,6 +884,23 @@ def discogs_manual_search(body: ManualSearchRequest, current_user: dict = Depend
     if not hit:
         raise HTTPException(status_code=404, detail='Kein Treffer gefunden.')
     return hit
+
+
+@app.post('/api/discogs/suggestions')
+def discogs_suggestions(body: SuggestionsRequest, current_user: dict = Depends(get_current_user)):
+    token = current_user.get('discogs_token', '')
+    best, alternatives, confidence = search_candidates(
+        catno=body.catno,
+        barcode=body.barcode,
+        artist=body.artist,
+        album=body.album,
+        token=token,
+    )
+    results = []
+    if best:
+        results.append(best)
+    results.extend(alternatives)
+    return {'results': results, 'confidence': confidence}
 
 
 @app.post('/api/discogs/add')

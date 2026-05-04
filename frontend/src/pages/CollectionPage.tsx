@@ -74,7 +74,7 @@ export default function CollectionPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6">
         {error && (
           <div className="mb-4 rounded-2xl border border-[#ff7a7a]/25 bg-[#ff7a7a]/10 p-4 text-sm text-[#ffb0b0]">
             {error}
@@ -97,7 +97,19 @@ export default function CollectionPage() {
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filtered.map((r) => (
-            <AlbumCard key={r.instance_id ?? r.release_id} release={r} />
+            <AlbumCard
+              key={r.instance_id ?? r.release_id}
+              release={r}
+              onUpdate={(updated) =>
+                setReleases((prev) =>
+                  prev.map((rel) =>
+                    (rel.instance_id ?? rel.release_id) === (r.instance_id ?? r.release_id)
+                      ? { ...rel, ...updated }
+                      : rel,
+                  ),
+                )
+              }
+            />
           ))}
         </div>
 

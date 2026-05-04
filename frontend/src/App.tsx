@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
 import Fab from './components/Fab'
+import Sidebar from './components/Sidebar'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import AdminPage from './pages/AdminPage'
 import AuthPage from './pages/AuthPage'
 import CollectionPage from './pages/CollectionPage'
 import AccountPage from './pages/AccountPage'
+import ScanHistoryPage from './pages/ScanHistoryPage'
 import SettingsPage from './pages/SettingsPage'
-import ScanSheet from './pages/ScanSheet'
+import AddSheet from './pages/AddSheet'
 
 function AppShell() {
   const [scanOpen, setScanOpen] = useState(false)
@@ -18,8 +20,10 @@ function AppShell() {
   const showChrome = Boolean(user) && location.pathname !== '/login'
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <main className="flex-1 overflow-hidden">
+    <div className="flex h-full">
+      {showChrome && <Sidebar onScan={() => setScanOpen(true)} />}
+
+      <main className={`flex-1 overflow-hidden h-full flex flex-col${showChrome ? ' md:ml-16 lg:ml-56' : ''}`}>
         <Routes>
           <Route path="/login" element={<AuthPage />} />
           <Route
@@ -41,8 +45,16 @@ function AppShell() {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute adminOnly>
                 <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <ScanHistoryPage />
               </ProtectedRoute>
             }
           />
@@ -59,7 +71,7 @@ function AppShell() {
 
       {showChrome && <BottomNav />}
       {showChrome && <Fab onClick={() => setScanOpen(true)} />}
-      {showChrome && scanOpen && <ScanSheet onClose={() => setScanOpen(false)} />}
+      {showChrome && scanOpen && <AddSheet onClose={() => setScanOpen(false)} />}
     </div>
   )
 }

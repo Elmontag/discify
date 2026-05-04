@@ -197,17 +197,19 @@ export default function ScanSheet({ onClose }: Props) {
                   ))}
                 </div>
 
-                {results.map((item, i) => (
-                  <ScanResultItem
-                    key={item.idx}
-                    item={item}
-                    collectionIds={collectionIds}
-                    onChange={(updated) =>
-                      setResults((prev) => prev.map((r, j) => (j === i ? updated : r)))
-                    }
-                    onRemove={() => setResults((prev) => prev.filter((_, j) => j !== i))}
-                  />
-                ))}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {results.map((item, i) => (
+                    <ScanResultItem
+                      key={item.idx}
+                      item={item}
+                      collectionIds={collectionIds}
+                      onChange={(updated) =>
+                        setResults((prev) => prev.map((r, j) => (j === i ? updated : r)))
+                      }
+                      onRemove={() => setResults((prev) => prev.filter((_, j) => j !== i))}
+                    />
+                  ))}
+                </div>
 
                 {/* Add results feedback */}
                 {Object.keys(addResults).length > 0 && (

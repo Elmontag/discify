@@ -31,6 +31,40 @@ export interface ScanHistoryItem {
   status: string
 }
 
+export interface ScanHistoryDetail {
+  id: number
+  created_at: string
+  has_image: boolean
+  analysis: Array<{
+    artist: string
+    album: string
+    catalog_number: string
+    barcode: string
+    sticker_text: string
+    confidence: string
+  }>
+  discogsResults: Array<{
+    ai_artist: string
+    ai_album: string
+    ai_catalog_number: string
+    ai_barcode: string
+    ai_edition?: string
+    found: boolean
+    confidence?: string
+    release_id: number | null
+    title: string
+    album?: string
+    artist: string
+    year: number | null
+    cover_url: string
+    thumb_url: string
+    catno: string
+    label: string
+    alternatives?: AlternativeHit[]
+  }>
+  status: string
+}
+
 export interface AdminUser {
   id: number
   email: string
@@ -57,6 +91,8 @@ export interface Release {
   thumb_url: string
   formats: string[]
   labels: string[]
+  catno: string
+  label: string
   date_added: string
 }
 
@@ -71,21 +107,42 @@ export interface CollectionResponse {
   username: string
 }
 
-export interface ScanResult {
-  idx: number
-  recognized_artist: string
-  recognized_album: string
-  found: boolean
-  discogs_title: string
-  discogs_artist: string
+export interface AlternativeHit {
   release_id: number | null
   master_id: number | null
+  title: string
+  album: string
+  artist: string
+  year: number | null
+  cover_url: string
+  thumb_url: string
+  catno: string
+  label: string
+}
+
+export interface ScanResult {
+  idx: number
+  ai_artist: string
+  ai_album: string
+  ai_catalog_number: string
+  ai_barcode: string
+  ai_edition: string
+  found: boolean
+  confidence: 'high' | 'medium' | 'low'
+  title: string
+  album: string
+  artist: string
   year: string
   cover_url: string
   thumb_url: string
+  catno: string
+  label: string
+  release_id: number | null
+  master_id: number | null
   in_collection: boolean
   status: 'new' | 'in_collection' | 'not_found'
   include: boolean
+  alternatives: AlternativeHit[]
 }
 
 export interface ScanResponse {
@@ -97,10 +154,18 @@ export interface DiscogsHit {
   release_id: number
   master_id: number | null
   title: string
+  album: string
   artist: string
   year: number | null
   cover_url: string
   thumb_url: string
+  catno: string
+  label: string
+}
+
+export interface DiscogsSearchSuggestionsResult {
+  results: DiscogsHit[]
+  confidence: 'high' | 'medium' | 'low'
 }
 
 export interface Models {
