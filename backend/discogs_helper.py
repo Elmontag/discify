@@ -11,7 +11,6 @@ The caller is responsible for inserting sleep() delays between searches.
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import requests
@@ -33,28 +32,17 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-def _token() -> str:
-    """Return DISCOGS_TOKEN from environment or raise ValueError."""
-    token = os.getenv("DISCOGS_TOKEN", "").strip()
-    if not token:
-        raise ValueError("DISCOGS_TOKEN is not set.")
-    return token
-
-
 # ---------------------------------------------------------------------------
 # Identity
 # ---------------------------------------------------------------------------
 
 
-def get_username() -> Optional[str]:
-    """Return the Discogs username for the configured token, or None on error."""
+def get_username(token: str) -> Optional[str]:
+    """Return Discogs username for the given token, or None on error."""
+    if not token:
+        return None
     try:
-        token = _token()
-        r = requests.get(
-            f"{_BASE_URL}/oauth/identity",
-            headers=_headers(token),
-            timeout=10,
-        )
+        r = requests.get(f"{_BASE_URL}/oauth/identity", headers=_headers(token), timeout=10)
         if r.status_code == 200:
             return r.json().get("username")
     except Exception:
@@ -67,7 +55,7 @@ def get_username() -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-def search_release(artist: str, album: str) -> Optional[dict]:
+def search_release(artist: str, album: str, token: str = '') -> Optional[dict]:
     """
     Search Discogs for the best matching release.
 
@@ -75,8 +63,9 @@ def search_release(artist: str, album: str) -> Optional[dict]:
         release_id, master_id, title, artist, year, cover_url, thumb_url
     or None if nothing was found / an error occurred.
     """
+    if not token:
+        return None
     try:
-        token = _token()
         query = " ".join(part for part in [artist, album] if part).strip()
         if not query:
             return None
@@ -121,10 +110,11 @@ def search_release(artist: str, album: str) -> Optional[dict]:
         return None
 
 
-def manual_search(query: str) -> Optional[dict]:
+def manual_search(query: str, token: str = '') -> Optional[dict]:
     """Free-text search – used when artist/album lookup failed."""
+    if not token:
+        return None
     try:
-        token = _token()
         params = {
             "q": query.strip(),
             "type": "release",
@@ -166,15 +156,16 @@ def manual_search(query: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
-def get_collection_release_ids(username: str) -> set[int]:
+def get_collection_release_ids(username: str, token: str) -> set[int]:
     """
     Return the set of release IDs already in the user's collection.
 
     Paginates through all pages of folder 0 ("All").
     Returns an empty set on error.
     """
+    if not token:
+        return set()
     try:
-        token = _token()
         ids: set[int] = set()
         page = 1
         while True:
@@ -200,14 +191,15 @@ def get_collection_release_ids(username: str) -> set[int]:
         return set()
 
 
-def add_release_to_collection(username: str, release_id: int) -> bool:
+def add_release_to_collection(username: str, release_id: int, token: str) -> bool:
     """
     Add a release to folder 0 of the user's Discogs collection.
 
     Returns True on success, False otherwise.
     """
+    if not token:
+        return False
     try:
-        token = _token()
         r = requests.post(
             f"{_BASE_URL}/users/{username}/collection/folders/0/releases/{release_id}",
             headers=_headers(token),
