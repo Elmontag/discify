@@ -156,4 +156,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ release_id: releaseId }),
     }),
+
+  discogsRemove: (instanceId: number, releaseId: number) =>
+    request<{ success: boolean }>(`/api/discogs/collection/${instanceId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ release_id: releaseId }),
+    }),
+
+  discogsPatchCollection: (releaseId: number, overrides: { title?: string; artist?: string; catno?: string; year?: number | null; label?: string }) =>
+    request<{ success: boolean }>(`/api/discogs/collection/${releaseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(overrides),
+    }),
+
+  getCollection: (page = 1, perPage = 50) =>
+    request<{
+      releases: Array<{
+        instance_id: number;
+        release_id: number;
+        title: string;
+        artist: string;
+        year: number | null;
+        cover_url: string;
+        thumb_url: string;
+        formats: string[];
+        labels: string[];
+        catno: string;
+        label: string;
+        date_added: string;
+      }>;
+      pagination: { page: number; pages: number; per_page: number; items: number };
+      username: string;
+    }>(`/api/collection?page=${page}&per_page=${perPage}`),
+
+  discogsReleaseDetail: (releaseId: number) =>
+    request<{
+      release_id: number; title: string; year: number | null; country: string;
+      barcode: string; catno: string; label: string; lowest_price: number | null;
+      num_for_sale: number; formats: string[]; genres: string[]; styles: string[]; tracklist_count: number;
+    }>(`/api/discogs/release/${releaseId}`),
 };

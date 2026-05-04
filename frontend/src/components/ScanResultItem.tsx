@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Disc3, RefreshCw, RotateCcw, Search, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Disc3, RefreshCw, RotateCcw, Search, X } from 'lucide-react'
 import type { AlternativeHit, ScanResult } from '../api/types'
 import { api } from '../api/client'
 
@@ -210,9 +210,15 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
             <span className={`inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-bold backdrop-blur-sm shrink-0 ${STATUS_STYLES[item.status]}`}>
               {STATUS_LABELS[item.status]}
             </span>
-            {item.confidence && item.found && (
+            {item.confidence && item.found && !item.is_suspect && (
               <span className={`text-[10px] font-medium ${CONFIDENCE_STYLES[item.confidence]}`}>
                 {CONFIDENCE_LABELS[item.confidence]}
+              </span>
+            )}
+            {item.is_suspect && (
+              <span className="inline-flex items-center gap-0.5 rounded-full border border-[#ff9a3c]/40 bg-[#ff9a3c]/15 px-1.5 py-px text-[10px] font-bold text-[#ffb570]">
+                <AlertTriangle size={9} />
+                Verdächtiger Treffer
               </span>
             )}
           </div>
@@ -256,6 +262,12 @@ export default function ScanResultItem({ item, collectionIds, onChange, onRemove
 
       {expanded && (
         <div className="border-t border-white/6 px-3 pb-3 pt-2 space-y-2">
+          {item.is_suspect && item.match_details && (
+            <div className="rounded-xl border border-[#ff9a3c]/25 bg-[#ff9a3c]/8 px-3 py-2 text-[10px] text-[#ffb570]">
+              <p className="font-bold mb-0.5">⚠ Verdächtiger Treffer – bitte Ergebnis prüfen</p>
+              <p>Interpret-Ähnlichkeit: {(item.match_details.artist_sim * 100).toFixed(0)} % · Album-Ähnlichkeit: {(item.match_details.album_sim * 100).toFixed(0)} % · Katalognr.: {item.match_details.catno_match}</p>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
             {([
               ['Interpret', 'ai_artist', item.ai_artist],

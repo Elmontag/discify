@@ -111,6 +111,13 @@ export default function CollectionPage() {
                   ),
                 )
               }
+              onDelete={() =>
+                setReleases((prev) =>
+                  prev.filter(
+                    (rel) => (rel.instance_id ?? rel.release_id) !== (r.instance_id ?? r.release_id),
+                  ),
+                )
+              }
             />
           ))}
         </div>

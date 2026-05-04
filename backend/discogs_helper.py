@@ -381,3 +381,134 @@ def add_release_to_collection(username: str, release_id: int, token: str) -> boo
         return r.status_code in (200, 201)
     except Exception:
         return False
+
+
+def remove_from_collection(username: str, instance_id: int, release_id: int, token: str) -> bool:
+    """Remove a specific instance from the user's Discogs collection (folder 0)."""
+    if not token:
+        return False
+    try:
+        r = requests.delete(
+            f"{_BASE_URL}/users/{username}/collection/folders/0/releases/{release_id}/instances/{instance_id}",
+            headers=_headers(token),
+            timeout=15,
+        )
+        return r.status_code == 204
+    except Exception:
+        return False
+
+
+def get_release_details(release_id: int, token: str) -> Optional[dict]:
+    """
+    Fetch full release details from Discogs.
+
+    Returns a dict with: release_id, title, year, barcode, catno, label,
+    lowest_price, num_for_sale, formats, genres, styles, tracklist_count.
+    Returns None on error.
+    """
+    if not token or not release_id:
+        return None
+    try:
+        r = requests.get(
+            f"{_BASE_URL}/releases/{release_id}",
+            headers=_headers(token),
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        barcode = ''
+        for ident in data.get('identifiers', []):
+            if ident.get('type', '').lower() in ('barcode', 'ean'):
+                barcode = ident.get('value', '')
+                break
+        labels = data.get('labels', [])
+        catno = labels[0].get('catno', '') if labels else ''
+        label = labels[0].get('name', '') if labels else ''
+        return {
+            'release_id': data.get('id'),
+            'title': data.get('title', ''),
+            'year': data.get('year'),
+            'country': data.get('country', ''),
+            'barcode': barcode,
+            'catno': catno,
+            'label': label,
+            'lowest_price': data.get('lowest_price'),
+            'num_for_sale': data.get('num_for_sale', 0),
+            'formats': [f.get('name', '') for f in data.get('formats', [])],
+            'genres': data.get('genres', []),
+            'styles': data.get('styles', []),
+            'tracklist_count': len(data.get('tracklist', [])),
+        }
+    except Exception:
+        return None
+
+
+def _cross_validate(
+    ai_artist: str,
+    ai_album: str,
+    ai_catno: str,
+    ai_barcode: str,
+    discogs_result: dict,
+    search_confidence: str = '',
+) -> dict:
+    """
+    Cross-validate AI-extracted data against a Discogs search result.
+
+    Separates "how we found it" (search_confidence) from "is this correct"
+    (match_quality). Flags suspicious results where a number-based search
+    succeeded but text similarity is very low (likely OCR error in the number).
+
+    Returns:
+        artist_sim    – float 0–1
+        album_sim     – float 0–1
+        catno_match   – 'exact' | 'partial' | 'none'
+        match_quality – 'high' | 'medium' | 'low' | 'suspect'
+        is_suspect    – bool
+    """
+    artist_sim = _similarity(ai_artist, discogs_result.get('artist', ''))
+    disc_album = discogs_result.get('album') or ''
+    if not disc_album:
+        raw = discogs_result.get('title', '')
+        parts = raw.split(' - ', 1)
+        disc_album = parts[1].strip() if len(parts) == 2 else raw
+    album_sim = _similarity(ai_album, disc_album)
+
+    dc = _norm_catno(discogs_result.get('catno', ''))
+    ac = _norm_catno(ai_catno)
+    if ac and dc:
+        if ac == dc:
+            catno_match = 'exact'
+        elif ac in dc or dc in ac:
+            catno_match = 'partial'
+        else:
+            catno_match = 'none'
+    else:
+        catno_match = 'none'
+
+    # A number-based hit (catno/barcode) with very low text similarity → suspect
+    has_id_based_hit = search_confidence == 'high' or catno_match in ('exact', 'partial') or bool(ai_barcode)
+    is_suspect = has_id_based_hit and artist_sim < 0.35 and album_sim < 0.35
+
+    if is_suspect:
+        match_quality = 'suspect'
+    elif catno_match == 'exact' and (artist_sim >= 0.4 or album_sim >= 0.4):
+        match_quality = 'high'
+    elif catno_match == 'exact':
+        match_quality = 'medium'
+    elif (catno_match == 'partial' or search_confidence == 'high') and (artist_sim >= 0.5 or album_sim >= 0.5):
+        match_quality = 'high'
+    elif artist_sim >= 0.65 and album_sim >= 0.55:
+        match_quality = 'high'
+    elif artist_sim >= 0.4 or album_sim >= 0.45:
+        match_quality = 'medium'
+    else:
+        match_quality = 'low'
+
+    return {
+        'artist_sim': round(artist_sim, 3),
+        'album_sim': round(album_sim, 3),
+        'catno_match': catno_match,
+        'match_quality': match_quality,
+        'is_suspect': is_suspect,
+    }

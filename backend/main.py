@@ -39,7 +39,18 @@ from pwdlib import PasswordHash
 sys.path.insert(0, str(Path(__file__).parent))
 
 import settings as settings_module
-from discogs_helper import add_release_to_collection, get_username, manual_search, search_release, search_by_catno, search_by_barcode, search_candidates
+from discogs_helper import (
+    add_release_to_collection,
+    get_username,
+    manual_search,
+    search_release,
+    search_by_catno,
+    search_by_barcode,
+    search_candidates,
+    remove_from_collection,
+    get_release_details,
+    _cross_validate,
+)
 from vision import ANTHROPIC_MODELS, OLLAMA_MODELS, identify_cds_from_image
 
 # ---------------------------------------------------------------------------
@@ -172,6 +183,18 @@ class AddToCollectionRequest(BaseModel):
     release_id: int
 
 
+class RemoveFromCollectionRequest(BaseModel):
+    release_id: int
+
+
+class CollectionOverrideRequest(BaseModel):
+    title: Optional[str] = None
+    artist: Optional[str] = None
+    catno: Optional[str] = None
+    year: Optional[int] = None
+    label: Optional[str] = None
+
+
 class ScanRequest(BaseModel):
     image_base64: str
     mime_type: str = 'image/jpeg'
@@ -256,6 +279,23 @@ def init_db() -> None:
         cur.execute(
             'CREATE INDEX IF NOT EXISTS idx_scan_expires ON scan_history(image_expires_at) WHERE image_path IS NOT NULL'
         )
+        cur.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS collection_overrides (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                release_id INTEGER NOT NULL,
+                title TEXT,
+                artist TEXT,
+                catno TEXT,
+                year INTEGER,
+                label TEXT,
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE(user_id, release_id)
+            )
+            '''
+        )
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_overrides_user ON collection_overrides(user_id)')
 
 
 def current_scan_month() -> str:
@@ -724,6 +764,9 @@ def get_collection(page: int = 1, per_page: int = 50, current_user: dict = Depen
         info = item.get('basic_information', {})
         artists = info.get('artists', [])
         artist_name = artists[0].get('name', '') if artists else ''
+        labels = info.get('labels', [])
+        label_name = labels[0].get('name', '') if labels else ''
+        catno = labels[0].get('catno', '') if labels else ''
         releases.append(
             {
                 'instance_id': item.get('instance_id'),
@@ -734,10 +777,26 @@ def get_collection(page: int = 1, per_page: int = 50, current_user: dict = Depen
                 'cover_url': info.get('cover_image', ''),
                 'thumb_url': info.get('thumb', ''),
                 'formats': [e.get('name', '') for e in info.get('formats', [])],
-                'labels': [e.get('name', '') for e in info.get('labels', [])],
+                'labels': [e.get('name', '') for e in labels],
+                'catno': catno,
+                'label': label_name,
                 'date_added': item.get('date_added', ''),
             }
         )
+    # Merge user overrides
+    with get_db() as cur:
+        cur.execute(
+            'SELECT release_id, title, artist, catno, year, label FROM collection_overrides WHERE user_id = %s',
+            (current_user['id'],),
+        )
+        overrides = {row['release_id']: dict(row) for row in cur.fetchall()}
+    if overrides:
+        for rel in releases:
+            ov = overrides.get(rel['release_id'])
+            if ov:
+                for field in ('title', 'artist', 'catno', 'year', 'label'):
+                    if ov.get(field) is not None:
+                        rel[field] = ov[field]
     pagination = data.get('pagination', {})
     return {
         'releases': releases,
@@ -821,6 +880,19 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
             token=token,
         )
 
+        match_details = None
+        is_suspect = False
+        if best:
+            match_details = _cross_validate(
+                ai_artist=artist,
+                ai_album=album,
+                ai_catno=catalog_number,
+                ai_barcode=barcode,
+                discogs_result=best,
+                search_confidence=confidence,
+            )
+            is_suspect = match_details['is_suspect']
+
         discogs_results.append({
             'ai_artist': artist,
             'ai_album': album,
@@ -829,6 +901,8 @@ async def scan_image(body: ScanRequest, current_user: dict = Depends(get_current
             'ai_edition': edition,
             'found': best is not None,
             'confidence': confidence,
+            'match_details': match_details,
+            'is_suspect': is_suspect,
             'release_id': best.get('release_id') if best else None,
             'master_id': best.get('master_id') if best else None,
             'title': best.get('title', '') if best else '',
@@ -915,6 +989,53 @@ def discogs_add(body: AddToCollectionRequest, current_user: dict = Depends(get_c
     if not success:
         raise HTTPException(status_code=502, detail='Fehler beim Hinzufügen zur Sammlung.')
     return {'success': True, 'release_id': body.release_id}
+
+
+@app.delete('/api/discogs/collection/{instance_id}')
+def discogs_remove(instance_id: int, body: RemoveFromCollectionRequest, current_user: dict = Depends(get_current_user)):
+    token = current_user.get('discogs_token', '')
+    if not token:
+        raise HTTPException(status_code=400, detail='Discogs-Token nicht konfiguriert.')
+    username = get_username(token)
+    if not username:
+        raise HTTPException(status_code=401, detail='Discogs-Verbindung fehlgeschlagen.')
+    success = remove_from_collection(username, instance_id, body.release_id, token=token)
+    if not success:
+        raise HTTPException(status_code=502, detail='Fehler beim Entfernen aus der Sammlung.')
+    return {'success': True, 'instance_id': instance_id}
+
+
+@app.patch('/api/discogs/collection/{release_id}')
+def discogs_patch_collection(release_id: int, body: CollectionOverrideRequest, current_user: dict = Depends(get_current_user)):
+    """Persist local overrides for a collection item (title, artist, catno, year, label)."""
+    with get_db() as cur:
+        cur.execute(
+            '''
+            INSERT INTO collection_overrides (user_id, release_id, title, artist, catno, year, label, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (user_id, release_id) DO UPDATE SET
+                title = COALESCE(EXCLUDED.title, collection_overrides.title),
+                artist = COALESCE(EXCLUDED.artist, collection_overrides.artist),
+                catno = COALESCE(EXCLUDED.catno, collection_overrides.catno),
+                year = COALESCE(EXCLUDED.year, collection_overrides.year),
+                label = COALESCE(EXCLUDED.label, collection_overrides.label),
+                updated_at = NOW()
+            ''',
+            (current_user['id'], release_id, body.title, body.artist, body.catno, body.year, body.label),
+        )
+    return {'success': True, 'release_id': release_id}
+
+
+@app.get('/api/discogs/release/{release_id}')
+def discogs_release_detail(release_id: int, current_user: dict = Depends(get_current_user)):
+    """Fetch full release details including EAN/barcode, lowest_price, formats."""
+    token = current_user.get('discogs_token', '')
+    if not token:
+        raise HTTPException(status_code=400, detail='Discogs-Token nicht konfiguriert.')
+    details = get_release_details(release_id, token=token)
+    if not details:
+        raise HTTPException(status_code=404, detail='Release nicht gefunden.')
+    return details
 
 
 # ---------------------------------------------------------------------------

@@ -129,6 +129,14 @@ export interface ScanResult {
   ai_edition: string
   found: boolean
   confidence: 'high' | 'medium' | 'low'
+  is_suspect: boolean
+  match_details: {
+    artist_sim: number
+    album_sim: number
+    catno_match: 'exact' | 'partial' | 'none'
+    match_quality: 'high' | 'medium' | 'low' | 'suspect'
+    is_suspect: boolean
+  } | null
   title: string
   album: string
   artist: string

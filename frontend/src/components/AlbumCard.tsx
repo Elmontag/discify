@@ -1,26 +1,42 @@
 import { useState } from 'react'
-import { Disc3, Pencil, X, Save } from 'lucide-react'
+import { Disc3, Pencil, X, Save, Trash2 } from 'lucide-react'
 import type { Release } from '../api/types'
+import { api } from '../api/client'
 
 interface Props {
   release: Release
   onUpdate?: (updated: Partial<Release>) => void
+  onDelete?: () => void
 }
 
-export default function AlbumCard({ release, onUpdate }: Props) {
+export default function AlbumCard({ release, onUpdate, onDelete }: Props) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(release.title)
   const [artist, setArtist] = useState(release.artist)
   const [catno, setCatno] = useState(release.catno ?? '')
   const [year, setYear] = useState(release.year ? String(release.year) : '')
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const thumb = release.thumb_url || release.cover_url
   const discogsUrl = `https://www.discogs.com/release/${release.release_id}`
 
-  function saveEdit(e: React.MouseEvent) {
+  async function saveEdit(e: React.MouseEvent) {
     e.preventDefault()
-    onUpdate?.({ title, artist, catno, year: year ? Number(year) : null })
-    setEditing(false)
+    setSaving(true)
+    try {
+      await api.discogsPatchCollection(release.release_id, {
+        title,
+        artist,
+        catno,
+        year: year ? Number(year) : null,
+      })
+      onUpdate?.({ title, artist, catno, year: year ? Number(year) : null })
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function cancelEdit(e: React.MouseEvent) {
@@ -30,6 +46,20 @@ export default function AlbumCard({ release, onUpdate }: Props) {
     setCatno(release.catno ?? '')
     setYear(release.year ? String(release.year) : '')
     setEditing(false)
+  }
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.preventDefault()
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    if (!release.instance_id) return
+    setDeleting(true)
+    try {
+      await api.discogsRemove(release.instance_id, release.release_id)
+      onDelete?.()
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
   }
 
   if (editing) {
@@ -73,9 +103,10 @@ export default function AlbumCard({ release, onUpdate }: Props) {
           <div className="flex gap-1.5 pt-1">
             <button
               onClick={saveEdit}
-              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#7c5cff] py-1.5 text-xs font-bold text-white"
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#7c5cff] py-1.5 text-xs font-bold text-white disabled:opacity-50"
             >
-              <Save size={11} /> Speichern
+              <Save size={11} /> {saving ? 'Speichern…' : 'Speichern'}
             </button>
             <button
               onClick={cancelEdit}
@@ -110,15 +141,29 @@ export default function AlbumCard({ release, onUpdate }: Props) {
           </div>
         )}
       </a>
-      {onUpdate && (
-        <button
-          onClick={(e) => { e.preventDefault(); setEditing(true) }}
-          className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 p-1.5 text-[#9eaccf] hover:text-[#7c5cff] backdrop-blur-sm"
-          aria-label="Bearbeiten"
-        >
-          <Pencil size={13} />
-        </button>
-      )}
+      <div className="absolute top-2 right-2 hidden group-hover:flex gap-1">
+        {onUpdate && (
+          <button
+            onClick={(e) => { e.preventDefault(); setEditing(true) }}
+            className="flex items-center justify-center rounded-full bg-black/60 p-1.5 text-[#9eaccf] hover:text-[#7c5cff] backdrop-blur-sm"
+            aria-label="Bearbeiten"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className={`flex items-center justify-center rounded-full bg-black/60 p-1.5 backdrop-blur-sm disabled:opacity-50 ${confirmDelete ? 'text-[#ff7a7a]' : 'text-[#9eaccf] hover:text-[#ff7a7a]'}`}
+            aria-label={confirmDelete ? 'Wirklich löschen?' : 'Entfernen'}
+            title={confirmDelete ? 'Nochmal klicken zum Bestätigen' : 'Aus Sammlung entfernen'}
+            onMouseLeave={() => setConfirmDelete(false)}
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
       <div className="p-3">
         <p className="truncate text-sm font-bold text-[#f5f7ff]">{release.title}</p>
         <p className="truncate text-xs text-[#9eaccf]">{release.artist}</p>

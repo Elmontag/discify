@@ -168,6 +168,8 @@ export const api = {
       ai_edition: item.ai_edition ?? '',
       found: item.found,
       confidence: (item.confidence as ScanResult['confidence']) ?? 'low',
+      is_suspect: (item as Record<string, unknown>).is_suspect as boolean ?? false,
+      match_details: (item as Record<string, unknown>).match_details as ScanResult['match_details'] ?? null,
       title: item.title,
       album: item.album ?? '',
       artist: item.artist,
@@ -229,6 +231,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ release_id: releaseId }),
     }),
+  discogsRemove: (instanceId: number, releaseId: number) =>
+    authRequest<{ success: boolean }>(`/api/discogs/collection/${instanceId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ release_id: releaseId }),
+    }),
+  discogsPatchCollection: (releaseId: number, overrides: { title?: string; artist?: string; catno?: string; year?: number | null; label?: string }) =>
+    authRequest<{ success: boolean }>(`/api/discogs/collection/${releaseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(overrides),
+    }),
+  discogsReleaseDetail: (releaseId: number) =>
+    authRequest<{
+      release_id: number; title: string; year: number | null; country: string;
+      barcode: string; catno: string; label: string; lowest_price: number | null;
+      num_for_sale: number; formats: string[]; genres: string[]; styles: string[]; tracklist_count: number;
+    }>(`/api/discogs/release/${releaseId}`),
 
   // Scan history
   updateScanHistoryItem: (id: number, data: { analysis_json?: string; discogs_results_json?: string }) =>

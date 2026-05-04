@@ -12,22 +12,31 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { Disc, Library, Pencil, Trash2, X } from 'lucide-react-native';
-import { deleteAlbum, getAlbums, initDb, updateAlbum } from '../services/db';
-import type { Album } from '../types';
-import type { RootStackParamList } from '../navigation';
+import { api } from '../services/api';
 import AddSheetModal from '../components/AddSheetModal';
 
 const { width } = Dimensions.get('window');
 const COLS = width >= 600 ? 3 : 2;
 const CARD_W = (width - 20 * 2 - (COLS - 1) * 12) / COLS;
 
-type NavProp = NativeStackNavigationProp<RootStackParamList>;
+interface CollectionRelease {
+  instance_id: number;
+  release_id: number;
+  title: string;
+  artist: string;
+  year: number | null;
+  cover_url: string;
+  thumb_url: string;
+  catno: string;
+  label: string;
+  date_added: string;
+}
 
 interface EditState {
-  id: number;
+  instance_id: number;
+  release_id: number;
   title: string;
   artist: string;
   year: string;
@@ -36,86 +45,100 @@ interface EditState {
 }
 
 export default function CollectionScreen() {
-  const navigation = useNavigation<NavProp>();
-  const [albums, setAlbums] = useState<Album[]>([]);
+  const [releases, setReleases] = useState<CollectionRelease[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async (p = 1) => {
     setLoading(true);
+    setError('');
     try {
-      initDb();
-      setAlbums(getAlbums());
+      const data = await api.getCollection(p);
+      setReleases((prev) => (p === 1 ? data.releases : [...prev, ...data.releases]));
+      setTotalPages(data.pagination.pages);
+      setPage(p);
+    } catch (e: unknown) {
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useFocusEffect(useCallback(() => {
-    load();
+    void load(1);
   }, [load]));
 
-  function openEdit(album: Album) {
+  function openEdit(item: CollectionRelease) {
     setEditState({
-      id: album.id,
-      title: album.title,
-      artist: album.artist,
-      year: album.year ? String(album.year) : '',
-      catno: album.catno ?? '',
-      label: album.label ?? '',
+      instance_id: item.instance_id,
+      release_id: item.release_id,
+      title: item.title,
+      artist: item.artist,
+      year: item.year ? String(item.year) : '',
+      catno: item.catno ?? '',
+      label: item.label ?? '',
     });
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editState) return;
     setSaving(true);
     try {
-      updateAlbum(editState.id, {
+      await api.discogsPatchCollection(editState.release_id, {
         title: editState.title,
         artist: editState.artist,
-        year: editState.year ? parseInt(editState.year, 10) : null,
         catno: editState.catno,
+        year: editState.year ? parseInt(editState.year, 10) : null,
         label: editState.label,
       });
-      setAlbums((prev) =>
-        prev.map((a) =>
-          a.id === editState.id
-            ? { ...a, title: editState.title, artist: editState.artist, year: editState.year ? parseInt(editState.year, 10) : null, catno: editState.catno, label: editState.label }
-            : a,
+      setReleases((prev) =>
+        prev.map((r) =>
+          r.instance_id === editState.instance_id
+            ? { ...r, title: editState.title, artist: editState.artist, year: editState.year ? parseInt(editState.year, 10) : null, catno: editState.catno, label: editState.label }
+            : r,
         ),
       );
       setEditState(null);
+    } catch (e: unknown) {
+      Alert.alert('Fehler', (e as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
-  function confirmDelete(id: number, title: string) {
+  function confirmDelete(item: CollectionRelease) {
     Alert.alert(
       'Album entfernen',
-      `"${title}" aus der Sammlung entfernen?`,
+      `"${item.title}" aus der Sammlung entfernen?`,
       [
         { text: 'Abbrechen', style: 'cancel' },
         {
           text: 'Entfernen',
           style: 'destructive',
-          onPress: () => {
-            deleteAlbum(id);
-            setAlbums((prev) => prev.filter((a) => a.id !== id));
-            setEditState(null);
+          onPress: async () => {
+            try {
+              await api.discogsRemove(item.instance_id, item.release_id);
+              setReleases((prev) => prev.filter((r) => r.instance_id !== item.instance_id));
+              setEditState(null);
+            } catch (e: unknown) {
+              Alert.alert('Fehler', (e as Error).message);
+            }
           },
         },
       ],
     );
   }
 
-  const filtered = albums.filter((album) => {
+  const filtered = releases.filter((r) => {
     if (!query) return true;
     const q = query.toLowerCase();
-    return album.title.toLowerCase().includes(q) || album.artist.toLowerCase().includes(q);
+    return r.title.toLowerCase().includes(q) || r.artist.toLowerCase().includes(q);
   });
 
   return (
@@ -136,7 +159,7 @@ export default function CollectionScreen() {
               Sammlung
             </Text>
           </View>
-          <Text style={{ color: '#9eaccf', fontSize: 13 }}>{albums.length} Alben</Text>
+          <Text style={{ color: '#9eaccf', fontSize: 13 }}>{releases.length} Alben</Text>
         </View>
         <TextInput
           style={{
@@ -156,23 +179,33 @@ export default function CollectionScreen() {
         />
       </View>
 
+      {error ? (
+        <View style={{ margin: 20, padding: 16, backgroundColor: 'rgba(255,100,100,0.1)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,100,100,0.2)' }}>
+          <Text style={{ color: '#ffb0b0', fontSize: 13 }}>{error}</Text>
+        </View>
+      ) : null}
+
       <FlatList
         data={filtered}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => String(item.instance_id)}
         numColumns={COLS}
         contentContainerStyle={{ padding: 20, gap: 12 }}
         columnWrapperStyle={COLS > 1 ? { gap: 12 } : undefined}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#7c5cff" />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load(1)} tintColor="#7c5cff" />}
+        onEndReached={() => { if (page < totalPages && !loading) void load(page + 1); }}
+        onEndReachedThreshold={0.5}
         ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingTop: 80 }}>
-            <Disc size={48} color="#9eaccf" />
-            <Text style={{ color: '#f5f7ff', fontWeight: 'bold', marginTop: 16, fontSize: 18 }}>
-              Keine Alben
-            </Text>
-            <Text style={{ color: '#9eaccf', marginTop: 8, textAlign: 'center' }}>
-              Tippe auf + um deine ersten CDs zu scannen
-            </Text>
-          </View>
+          !loading ? (
+            <View style={{ alignItems: 'center', paddingTop: 80 }}>
+              <Disc size={48} color="#9eaccf" />
+              <Text style={{ color: '#f5f7ff', fontWeight: 'bold', marginTop: 16, fontSize: 18 }}>
+                {query ? 'Keine Treffer' : 'Sammlung ist leer'}
+              </Text>
+              <Text style={{ color: '#9eaccf', marginTop: 8, textAlign: 'center' }}>
+                {query ? 'Versuche einen anderen Suchbegriff.' : 'Tippe auf + um deine ersten CDs zu scannen'}
+              </Text>
+            </View>
+          ) : null
         }
         renderItem={({ item }) => (
           <View
@@ -185,9 +218,9 @@ export default function CollectionScreen() {
               borderColor: 'rgba(255,255,255,0.06)',
             }}
           >
-            {item.cover_url ? (
+            {(item.thumb_url || item.cover_url) ? (
               <Image
-                source={{ uri: item.cover_url }}
+                source={{ uri: item.thumb_url || item.cover_url }}
                 style={{ width: CARD_W, height: CARD_W }}
                 resizeMode="cover"
               />
@@ -267,7 +300,7 @@ export default function CollectionScreen() {
       </TouchableOpacity>
 
       {addSheetOpen && (
-        <AddSheetModal onClose={() => setAddSheetOpen(false)} onAlbumAdded={load} />
+        <AddSheetModal onClose={() => setAddSheetOpen(false)} onAlbumAdded={() => load(1)} />
       )}
 
       {/* Edit Modal */}
@@ -337,7 +370,7 @@ export default function CollectionScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  onPress={() => confirmDelete(editState.id, editState.title)}
+                  onPress={() => editState && confirmDelete({ instance_id: editState.instance_id, release_id: editState.release_id, title: editState.title, artist: editState.artist, year: editState.year ? parseInt(editState.year, 10) : null, cover_url: '', thumb_url: '', catno: editState.catno, label: editState.label, date_added: '' })}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',

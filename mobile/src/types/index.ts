@@ -1,6 +1,7 @@
 export interface Album {
   id: number;
   discogs_release_id: number | null;
+  instance_id?: number | null;
   title: string;
   artist: string;
   year: number | null;
@@ -34,6 +35,14 @@ export interface ScanResult {
   ai_edition?: string;
   found: boolean;
   confidence?: 'high' | 'medium' | 'low';
+  is_suspect?: boolean;
+  match_details?: {
+    artist_sim: number;
+    album_sim: number;
+    catno_match: 'exact' | 'partial' | 'none';
+    match_quality: 'high' | 'medium' | 'low' | 'suspect';
+    is_suspect: boolean;
+  } | null;
   release_id: number | null;
   master_id: number | null;
   title: string;

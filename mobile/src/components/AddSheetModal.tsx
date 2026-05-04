@@ -27,6 +27,7 @@ import {
   X,
   Plus,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react-native';
 import { api } from '../services/api';
 import { albumExists, insertAlbum } from '../services/db';
@@ -844,6 +845,12 @@ function ScanResultRow({
             <Text style={{ fontSize: 10, fontWeight: '700', color: STATUS_COLORS[item.scan.found ? 'new' : 'not_found'], flexShrink: 0 }}>
               {STATUS_LABELS[item.scan.found ? 'new' : 'not_found']}
             </Text>
+            {item.scan.is_suspect && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(251,146,60,0.15)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                <AlertTriangle size={9} color="#fb923c" />
+                <Text style={{ fontSize: 9, color: '#fb923c', fontWeight: '700' }}>Verdächtig</Text>
+              </View>
+            )}
           </View>
           <Text style={{ color: '#f5f7ff', fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
             {item.editArtist}
@@ -887,6 +894,14 @@ function ScanResultRow({
       {/* Expanded panel */}
       {expanded && (
         <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', padding: 12, gap: 8 }}>
+          {item.scan.is_suspect && item.scan.match_details && (
+            <View style={{ backgroundColor: 'rgba(251,146,60,0.1)', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: 'rgba(251,146,60,0.2)', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={12} color="#fb923c" />
+              <Text style={{ color: '#fb923c', fontSize: 10 }}>
+                Interpret: {Math.round((item.scan.match_details.artist_sim ?? 0) * 100)}% · Album: {Math.round((item.scan.match_details.album_sim ?? 0) * 100)}% Übereinstimmung
+              </Text>
+            </View>
+          )}
           {([
             ['Interpret', 'editArtist', item.editArtist],
             ['Album', 'editAlbum', item.editAlbum],
