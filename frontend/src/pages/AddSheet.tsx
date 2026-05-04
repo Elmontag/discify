@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import ScanResultItem from '../components/ScanResultItem'
 import { api } from '../api/client'
+import { useRefresh } from '../context/RefreshContext'
 import type { DiscogsHit, ScanResult } from '../api/types'
 
 interface Props {
@@ -78,6 +79,7 @@ function HitCard({ hit, onAdd, added, adding }: HitCardProps) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function AddSheet({ onClose }: Props) {
+  const { bumpCollection, bumpHistory, bumpUser } = useRefresh()
   const [mode, setMode] = useState<Mode>('search')
 
   // ── Search mode ──
@@ -164,6 +166,8 @@ export default function AddSheet({ onClose }: Props) {
     try {
       await api.discogsAdd(hit.release_id)
       setAddedIds((prev) => new Set([...prev, hit.release_id]))
+      bumpCollection()
+      bumpUser()
     } catch {
       // keep silent – user can retry
     } finally {
@@ -240,6 +244,8 @@ export default function AddSheet({ onClose }: Props) {
       const { albums } = await api.scanImage(imageFile)
       setAiResults(albums)
       setAiStep('results')
+      bumpHistory()
+      bumpUser()
     } catch (e: unknown) {
       setAiError((e as Error).message)
       setAiStep('preview')
@@ -262,6 +268,8 @@ export default function AddSheet({ onClose }: Props) {
     }
     setAddFeedback(fb)
     setAddingAll(false)
+    const anyAdded = Object.values(fb).some((v) => v === 'ok')
+    if (anyAdded) { bumpCollection(); bumpUser() }
     setAiResults((prev) =>
       prev.map((r) =>
         r.release_id && fb[r.release_id] === 'ok'

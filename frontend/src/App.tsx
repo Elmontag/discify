@@ -5,6 +5,7 @@ import Fab from './components/Fab'
 import Sidebar from './components/Sidebar'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { RefreshProvider } from './context/RefreshContext'
 import AdminPage from './pages/AdminPage'
 import AuthPage from './pages/AuthPage'
 import CollectionPage from './pages/CollectionPage'
@@ -79,7 +80,9 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <RefreshProvider>
+        <AppShell />
+      </RefreshProvider>
     </AuthProvider>
   )
 }

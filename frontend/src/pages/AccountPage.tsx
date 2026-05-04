@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useRefresh } from '../context/RefreshContext'
 import type { UserMe } from '../api/types'
 
 function formatDate(value?: string | null) {
@@ -77,7 +78,8 @@ function CollapsibleSection({
 }
 
 export default function AccountPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, refreshUser } = useAuth()
+  const { userVersion } = useRefresh()
   const navigate = useNavigate()
   const [account, setAccount] = useState<UserMe | null>(user)
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
@@ -101,6 +103,12 @@ export default function AccountPage() {
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // Re-fetch user data (scan counter etc.) when userVersion bumps
+  useEffect(() => {
+    void refreshUser()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userVersion])
 
   useEffect(() => {
     setAccount(user)

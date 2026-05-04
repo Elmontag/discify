@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Clock, Disc3, Save, Trash2, X } from 'lucide-react'
 import { api } from '../api/client'
+import { useRefresh } from '../context/RefreshContext'
 import type { AlternativeHit, ScanHistoryDetail, ScanHistoryItem } from '../api/types'
 
 function parseScanItem(item: ScanHistoryItem): ScanHistoryDetail {
@@ -25,6 +26,7 @@ interface EditState {
 }
 
 export default function ScanHistoryPage() {
+  const { historyVersion } = useRefresh()
   const [items, setItems] = useState<ScanHistoryDetail[]>([])
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
@@ -52,7 +54,7 @@ export default function ScanHistoryPage() {
     }
   }, [])
 
-  useEffect(() => { load(1) }, [load])
+  useEffect(() => { void load(1) }, [load, historyVersion])
 
   async function handleDelete(id: number) {
     if (!window.confirm('Scan-Eintrag wirklich löschen?')) return

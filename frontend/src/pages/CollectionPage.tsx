@@ -2,9 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { Disc, RefreshCw, Search } from 'lucide-react'
 import AlbumCard from '../components/AlbumCard'
 import { api } from '../api/client'
+import { useRefresh } from '../context/RefreshContext'
 import type { Release } from '../api/types'
 
 export default function CollectionPage() {
+  const { collectionVersion } = useRefresh()
   const [releases, setReleases] = useState<Release[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -30,8 +32,8 @@ export default function CollectionPage() {
   }, [])
 
   useEffect(() => {
-    load(1)
-  }, [load])
+    void load(1)
+  }, [load, collectionVersion])
 
   const filtered = releases.filter((r) => {
     if (!query) return true

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Disc, Library, Pencil, Trash2, X } from 'lucide-react-native';
 import { deleteAlbum, getAlbums, initDb, updateAlbum } from '../services/db';
@@ -54,9 +54,9 @@ export default function CollectionScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load();
-  }, [load]);
+  }, [load]));
 
   function openEdit(album: Album) {
     setEditState({
@@ -267,7 +267,7 @@ export default function CollectionScreen() {
       </TouchableOpacity>
 
       {addSheetOpen && (
-        <AddSheetModal onClose={() => { setAddSheetOpen(false); load(); }} />
+        <AddSheetModal onClose={() => setAddSheetOpen(false)} onAlbumAdded={load} />
       )}
 
       {/* Edit Modal */}

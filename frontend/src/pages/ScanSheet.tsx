@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Upload, X, Zap, CheckCircle2, AlertCircle } from 'lucide-react'
 import ScanResultItem from '../components/ScanResultItem'
 import { api } from '../api/client'
+import { useRefresh } from '../context/RefreshContext'
 import type { ScanResult } from '../api/types'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 type Step = 'capture' | 'preview' | 'scanning' | 'results'
 
 export default function ScanSheet({ onClose }: Props) {
+  const { bumpCollection, bumpHistory, bumpUser } = useRefresh()
   const [step, setStep] = useState<Step>('capture')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -43,6 +45,8 @@ export default function ScanSheet({ onClose }: Props) {
       const data = await api.scanImage(imageFile)
       setResults(data.albums)
       setStep('results')
+      bumpHistory()
+      bumpUser()
     } catch (e: unknown) {
       setScanError((e as Error).message)
       setStep('preview')
@@ -65,6 +69,8 @@ export default function ScanSheet({ onClose }: Props) {
     }
     setAddResults(newResults)
     setAddingAll(false)
+    const anyAdded = Object.values(newResults).some((v) => v === 'ok')
+    if (anyAdded) { bumpCollection(); bumpUser() }
     // Mark added as in_collection
     setResults((prev) =>
       prev.map((r) =>

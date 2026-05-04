@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Clock, Disc3, Save, Trash2, X } from 'lucide-react-native';
 import { api } from '../services/api';
 import type { AlternativeHit, MobileScanHistoryItem } from '../types';
@@ -76,7 +77,7 @@ export default function ScanHistoryScreen() {
     }
   }, []);
 
-  useEffect(() => { load(1); }, [load]);
+  useFocusEffect(useCallback(() => { load(1); }, [load]));
 
   async function handleDelete(id: number) {
     Alert.alert('Löschen', 'Scan-Eintrag wirklich löschen?', [

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   AlertCircle,
   CheckCircle2,
@@ -39,7 +40,7 @@ export default function AccountScreen() {
   const [deleting, setDeleting] = useState(false);
   const [section, setSection] = useState<'info' | 'profile' | 'password'>('info');
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     api.me()
       .then((me) => {
         setUserInfo(me);
@@ -47,7 +48,7 @@ export default function AccountScreen() {
         setEmail(me.email);
       })
       .catch(() => {});
-  }, []);
+  }, []));
 
   async function saveProfile() {
     if (password && password !== passwordConfirm) {

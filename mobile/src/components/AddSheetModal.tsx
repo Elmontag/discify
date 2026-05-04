@@ -59,10 +59,12 @@ interface ResultItem {
 
 interface Props {
   onClose: () => void;
+  onAlbumAdded?: () => void;
 }
 
-export default function AddSheetModal({ onClose }: Props) {
+export default function AddSheetModal({ onClose, onAlbumAdded }: Props) {
   const [tab, setTab] = useState<Tab>('search');
+  const handleAdded = useCallback(() => { onAlbumAdded?.(); onClose(); }, [onAlbumAdded, onClose]);
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -101,10 +103,10 @@ export default function AddSheetModal({ onClose }: Props) {
 
           {/* Content */}
           <View style={{ flex: 1 }}>
-            {tab === 'search' && <SearchTab onAdded={onClose} />}
-            {tab === 'barcode' && <BarcodeTab onAdded={onClose} />}
-            {tab === 'ai-camera' && <AiCameraTab onAdded={onClose} />}
-            {tab === 'ai-file' && <AiFileTab onAdded={onClose} />}
+            {tab === 'search' && <SearchTab onAdded={handleAdded} />}
+            {tab === 'barcode' && <BarcodeTab onAdded={handleAdded} />}
+            {tab === 'ai-camera' && <AiCameraTab onAdded={handleAdded} />}
+            {tab === 'ai-file' && <AiFileTab onAdded={handleAdded} />}
           </View>
         </View>
       </View>
